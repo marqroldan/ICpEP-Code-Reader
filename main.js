@@ -1,5 +1,3 @@
-
-
  function webcam() {
     navigator.mediaDevices.getUserMedia({ video: true })
     .then(function(stream) {
@@ -19,7 +17,7 @@ function picker() {
         
         video = document.querySelector('img');
         stream.getContext('2d').drawImage(video, 0, 0, video.width, video.height);
-
+        
 
         ///Overlay a hexagon mask to limit the area of checking
 
@@ -28,6 +26,7 @@ function picker() {
 }   
 
         var stat = function() {
+            /*
             let src = cv.imread('stream');
             let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
             cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
@@ -37,13 +36,19 @@ function picker() {
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
             // You can try more different parameters
-            cv.findContours(src, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+            cv.findContours(src, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
             console.log(contours.size())
             // draw contours with random Scalar
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
                 let vertices = cnt.size().width * cnt.size().height;
 
+
+                for(let j = 0; j<vertices; j++) {
+                    const [x,y] = cnt.intPtr(j);
+                    console.log('x',x,'y',y);
+                }
+                //if(vertices < 400) continue;
                 //if(vertices!=24) continue;
                 //if(hierarchy.intPtr(0,i)[3]==-1) continue;
 
@@ -54,11 +59,71 @@ function picker() {
             }
             cv.imshow('edit', dst);
             src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
+
+            */
+
+           let src = cv.imread('stream');
+           let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
+           cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
+           cv.threshold(src, src, 100, 200, cv.THRESH_BINARY);
+           let contours = new cv.MatVector();
+           let hierarchy = new cv.Mat();
+           let poly = new cv.MatVector();
+           cv.findContours(src, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+           // approximates each contour to polygon
+           for (let i = 0; i < contours.size(); ++i) {
+               let tmp = new cv.Mat();
+               let cnt = contours.get(i);
+               // You can try more different parameters
+               cv.approxPolyDP(cnt, tmp, 3, true);
+               poly.push_back(tmp);
+               cnt.delete(); tmp.delete();
+           }
+           // draw contours with random Scalar
+           for (let i = 0; i < contours.size(); ++i) {
+               let xc = poly.get(i);
+               let vertices = (xc.size().width * xc.size().height);
+               if(vertices!=6) continue;
+               let vals = [];
+                
+               for(let j = 0; j<3; j++) {
+                    const startPoint = {
+                        x: xc.intPtr(j)[0],
+                        y: xc.intPtr(j)[1],
+                    }
+                    const endPoint = {
+                        x: xc.intPtr(j+3)[0],
+                        y: xc.intPtr(j+3)[1],
+                    }
+
+                    const distance = Math.hypot(Math.abs(startPoint.x - endPoint.x), Math.abs(startPoint.y - endPoint.y));
+
+                    vals.push(distance);
+
+                   console.log('start',startPoint,'end',endPoint, 'distance', distance);
+               }
+
+               let vals_min = Math.min(...vals);
+               vals.forEach(function(val) {
+                    console.log("difference", Math.abs(vals_min-val), "<10? ", Math.abs(vals_min-x) <= 2)
+               });
+               let ok = vals.every(x=>Math.abs(vals_min-x) <= 10);
+
+               let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
+                                         Math.round(Math.random() * 255));
+               if(ok) console.log("OK?", ok, "Vertices:", vertices, "Color:", color, "Hierarchy", hierarchy.intPtr(0,i))
+               if(ok) cv.drawContours(dst, poly, i, color, 1, 8, hierarchy, 0);
+           }
+           cv.imshow('edit', dst);
+           src.delete(); dst.delete(); hierarchy.delete(); contours.delete(); poly.delete();
+
         }
 
         var mido = function() {
           //draw the stream to the canvas
           stream.getContext('2d').drawImage(video, 0, 0, 640, 480);
+
+            stat();
             //makesure it loops back
             setTimeout(function() {
                 mido();
