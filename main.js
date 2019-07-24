@@ -1,4 +1,4 @@
- import simpleBlobDetector from '/blobdetect.js';
+
 
  function webcam() {
     navigator.mediaDevices.getUserMedia({ video: true })
@@ -22,7 +22,7 @@ function picker() {
 
 
         ///Overlay a hexagon mask to limit the area of checking
-        
+
 
     }
 }   
