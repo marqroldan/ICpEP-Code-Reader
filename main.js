@@ -61,62 +61,99 @@ function picker() {
             src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
 
             */
+            let foundT = false;
+            let src = cv.imread('stream');
+            let img = cv.imread('stream');
+            let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
+            cv.cvtColor(img, img, cv.COLOR_RGBA2GRAY, 0);
+            cv.threshold(img, img, 100, 200, cv.THRESH_BINARY);
+            let contours = new cv.MatVector();
+            let hierarchy = new cv.Mat();
+            let poly = new cv.MatVector();
+            cv.findContours(img, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
 
-           let src = cv.imread('stream');
-           let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
-           cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
-           cv.threshold(src, src, 100, 200, cv.THRESH_BINARY);
-           let contours = new cv.MatVector();
-           let hierarchy = new cv.Mat();
-           let poly = new cv.MatVector();
-           cv.findContours(src, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
-           // approximates each contour to polygon
-           for (let i = 0; i < contours.size(); ++i) {
-               let tmp = new cv.Mat();
-               let cnt = contours.get(i);
-               // You can try more different parameters
-               cv.approxPolyDP(cnt, tmp, 3, true);
-               poly.push_back(tmp);
-               cnt.delete(); tmp.delete();
-           }
-           // draw contours with random Scalar
-           for (let i = 0; i < contours.size(); ++i) {
-               let xc = poly.get(i);
-               let vertices = (xc.size().width * xc.size().height);
-               if(vertices!=6) continue;
-               let vals = [];
-                
-               for(let j = 0; j<3; j++) {
-                    const startPoint = {
-                        x: xc.intPtr(j)[0],
-                        y: xc.intPtr(j)[1],
+
+            let polyCount = 0;
+            // approximates each contour to polygon
+            for (let i = 0; i < contours.size(); ++i) {
+                let tmp = new cv.Mat();
+                let cnt = contours.get(i);
+                cv.approxPolyDP(cnt, tmp, 20, true);
+                let vertices = tmp.size().width * tmp.size().height
+
+                if(vertices >= 6 || vertices <= 10)  {
+                    let circle = cv.minEnclosingCircle(tmp);
+
+                    if( circle.radius >= 130 && circle.radius <= 300) {
+                        foundT = true;
+                        let circleColor = new cv.Scalar(255, 0, 0);
+                        console.log(circle.radius);
+                        cv.circle(src, circle.center, circle.radius, circleColor);
+                        let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
+                                                  Math.round(Math.random() * 255));
+                        poly.push_back(tmp);
+                        cv.drawContours(src, poly, polyCount, color, 1, 8, hierarchy, 0);
+                        console.log("Vertices:", vertices, "Color:", color, "Hierarchy", hierarchy.intPtr(0,i))
+                        polyCount++;
                     }
-                    const endPoint = {
-                        x: xc.intPtr(j+3)[0],
-                        y: xc.intPtr(j+3)[1],
-                    }
+                }
+                cnt.delete(); tmp.delete();
 
-                    const distance = Math.hypot(Math.abs(startPoint.x - endPoint.x), Math.abs(startPoint.y - endPoint.y));
+                if(i==contours.size()-1) {
+                    cv.imshow('edit', src);
+                    poly.delete();
+                    src.delete(); dst.delete(); hierarchy.delete(); contours.delete();
+                    return foundT;
+                }
+            }
 
-                    vals.push(distance);
 
-                   console.log('start',startPoint,'end',endPoint, 'distance', distance);
-               }
+            /*
+           if (poly.size()>0) {
 
-               let vals_min = Math.min(...vals);
-               vals.forEach(function(val) {
-                    console.log("difference", Math.abs(vals_min-val), "<10? ", Math.abs(vals_min-x) <= 2)
-               });
-               let ok = vals.every(x=>Math.abs(vals_min-x) <= 10);
-
-               let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-                                         Math.round(Math.random() * 255));
-               if(ok) console.log("OK?", ok, "Vertices:", vertices, "Color:", color, "Hierarchy", hierarchy.intPtr(0,i))
-               if(ok) cv.drawContours(dst, poly, i, color, 1, 8, hierarchy, 0);
+            // draw contours with random Scalar
+            for (let i = 0; i < poly.size(); ++i) {
+                let xc = poly.get(i);
+                let vertices = (xc.size().width * xc.size().height);
+                if(vertices!=6) continue;
+                let vals = [];
+                 
+                for(let j = 0; j<3; j++) {
+                     const startPoint = {
+                         x: xc.intPtr(j)[0],
+                         y: xc.intPtr(j)[1],
+                     }
+                     const endPoint = {
+                         x: xc.intPtr(j+3)[0],
+                         y: xc.intPtr(j+3)[1],
+                     }
+ 
+                     const distance = Math.hypot(Math.abs(startPoint.x - endPoint.x), Math.abs(startPoint.y - endPoint.y));
+ 
+                     vals.push(distance);
+ 
+                    console.log('start',startPoint,'end',endPoint, 'distance', distance);
+                }
+ 
+                let vals_min = Math.min(...vals);
+                vals.forEach(function(val) {
+                     console.log("difference", Math.abs(vals_min-val), "<10? ", Math.abs(vals_min-x) <= 2)
+                });
+                let ok = vals.every(x=>Math.abs(vals_min-x) <= 10);
+ 
+                if(ok) console.log("OK?", ok, "Vertices:", vertices, "Color:", color, "Hierarchy", hierarchy.intPtr(0,i))
+                if(ok) 
+            }
+            cv.imshow('edit', src);
+            poly.delete();
+            return true;
            }
-           cv.imshow('edit', dst);
-           src.delete(); dst.delete(); hierarchy.delete(); contours.delete(); poly.delete();
-
+           else {
+            src.delete(); dst.delete(); hierarchy.delete(); contours.delete();
+            poly.delete();
+            return false;
+           }
+           */
         }
 
         var mido = function() {
@@ -124,10 +161,14 @@ function picker() {
           stream.getContext('2d').drawImage(video, 0, 0, 640, 480);
 
             stat();
-            //makesure it loops back
-            setTimeout(function() {
-                mido();
-            }, 50);
+
+
+            if(!stat) {
+                //makesure it loops back
+                setTimeout(function() {
+                    mido();
+                }, 50);
+            }
             
         }
         var x = document.querySelector("#capture")
