@@ -73,7 +73,13 @@ function picker() {
             let img = cv.imread('stream');
             let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
             cv.cvtColor(img, img, cv.COLOR_RGBA2GRAY, 0);
-            cv.threshold(img, img, 100,  180, cv.THRESH_BINARY);
+            cv.threshold(img, img, 90,  255, cv.THRESH_BINARY);
+            cv.imshow('edit', img);
+            /*
+            started = false;
+            src.delete(); dst.delete();  img.delete(); 
+            return
+            */
             //cv.Laplacian(img, img, cv.CV_8U, 1, 1, 0, cv.BORDER_DEFAULT);
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
@@ -133,11 +139,6 @@ function picker() {
 
                 //cnt2.delete(); tmp2.delete();
 
-            }
-
-            if(poly.size()<2) {
-                started = false;
-                return;
             }
 
             function doCheck() {
@@ -225,13 +226,19 @@ function picker() {
 
             let donePoints = {};
             let findBase = [];
+            let distBase = 0;
+            let rejectAll = false;
 
 
 
-            console.log(circlesDistance, Math.PI * Math.pow((circlesDistance),2), circlesDistance/2, Math.PI * Math.pow((circlesDistance/2),2));
+           // console.log(circlesDistance, Math.PI * Math.pow((circlesDistance),2), circlesDistance/2, Math.PI * Math.pow((circlesDistance/2),2));
 
 
             for (let i = 0; i < contours.size(); ++i) {
+                if(findBase.length>2 || rejectAll) {
+                    started = false;
+                    break;
+                }
                 let cnt = contours.get(i);
                 let bound = cv.boundingRect(cnt);
                 const area = bound.width * bound.height;
@@ -263,7 +270,33 @@ function picker() {
                 xc = xc - biggestCircle.center.x;
                 yc = biggestCircle.center.y - yc;
 
+                let minx = 0;
+                let miny = 0;
+
                 const distanceFromCircle = Math.hypot(xc,yc)
+
+                if(bound.x > 0 ) {
+                    if(bound.y > 0) {
+                        minx = bound.x;
+                        miny = bound.y + bound.height;
+                    }
+                    else {
+                        minx = bound.x;
+                        miny = bound.y;
+                    }
+                }
+                else {
+                    if(bound.y > 0) {
+                        minx = bound.x + bound.width;
+                        miny = bound.y + bound.height;
+                    }
+                    else {
+                        minx = bound.x + bound.width;
+                        miny = bound.y;
+                    }
+                }
+
+                const minDist = Math.hypot(minx, miny);
 
                 if(distanceFromCircle <= newRadius) {
 
@@ -301,6 +334,7 @@ function picker() {
                         distLast,
                         angle,
                         xDiff,
+                        minDist,
                         pointSlope,
                         distanceFromCircle,
                         distanceFromStart,
@@ -312,6 +346,13 @@ function picker() {
                     ) {
                         if(angle < 7) {
                             findBase.push(j);
+
+                            if(distBase==0) {
+                                distBase = distanceFromCircle;
+                            }
+                            else {
+                                distBase = (distBase + distanceFromCircle) / 2;
+                            }
                         }
                         else {
                             donePoints[j].push(deets);
@@ -320,6 +361,7 @@ function picker() {
                         }
                         break;
                     }
+                    /*
                     else {
 
                         if(xc > 121 && xc < 121 + 21 && yc > -52 - 21 && yc < -52 ) console.log(deets);
@@ -329,6 +371,7 @@ function picker() {
                         //if(distanceFromCircle <= newRadius) console.log(deets);
                         //console.log(deets);
                     }
+                    */
                 }
 
                     //console.log(distanceFromCircle, bound.x + (bound.width/2), bound.y + (bound.height/2))
@@ -339,11 +382,20 @@ function picker() {
                 if(i==contours.size()-1) {
                     if(findBase.length == 2) {
                         cv.imshow('edit', src);
+
+                        //findBase[0] - (findBase[1] % 6) should always be positive
+                        if(findBase[0] - (findBase[1] % 6) < 0) {
+                            console.log('Wrong direction');
+                            started = false;
+                            break;
+                        }                        
                         console.log(findBase);
+                        console.log(distBase);
                         console.log("donePoints", donePoints);
                         started = true;
                         //loop through the segments
                         for(let j = 0; j<6; j++) {
+                            
                             //Check if the points in the segments contain only 9 or less
                             if(donePoints[j].length > 9) {
                                 started = false;
@@ -353,23 +405,159 @@ function picker() {
                             let doneInPoints = [];
 
                             let angle = segments[j].angle;
-                            let startAngle = (angle * 0.23227383863);
+                            //0.23227383863
+                            let startAngle = (angle * 0.31396484375);
                             let increment = (angle - startAngle) / 8;
-                            console.log(donePoints[j], donePoints[j].length);
-                            for(let a = startAngle, ctr = 0; a < angle; a+=increment, ctr++) {
-                                if(!(ctr in newSet[j])) newSet[j][ctr] = [];
+                            //console.log(donePoints[j], donePoints[j].length);
+                            
+                            for(let a = startAngle, ctr = 0; a < angle+(increment/2); a+=increment, ctr++) {
+                                if(!(ctr in newSet[j])) newSet[j][ctr] = {};
                                 for(let b = 0; b < donePoints[j].length; b++) {
-                                    if (doneInPoints.includes(b))continue;
+                                    if (doneInPoints.includes(b)) continue;
                                     if (donePoints[j][b].angle <= a) {
-                                        console.log("angle",angle,"seg",a, "index", ctr, "pointAng", donePoints[j][b] );
+                                        //There shouldn't be an item in the before the starting angle
+                                        if(ctr==0) {
+                                            started = false;
+                                            rejectAll = true;
+                                            break;
+                                        }
+
+                                        //Reject if found a very near angle but different section
+                                        if(ctr!=0) {
+                                            for(let key in newSet[j][ctr-1]) {
+                                                if(Math.abs(newSet[j][ctr-1][key].angle - donePoints[j][b].angle) < 3.5) {
+                                                    console.log("BAD ANGLE", j, b, newSet[j][ctr-1][key].angle, donePoints[j][b].angle);
+                                                    rejectAll = true;
+                                                    break;
+                                                }
+                                            }
+                                            if(rejectAll) {
+                                                started = false;
+                                                break;
+                                            }
+                                        }
+
+                                        if(Object.keys(newSet[j][ctr]).length==2) {
+                                            //Rejecting because there are already 2 objects in the same seciton
+                                            rejectAll = true;
+                                            break;
+                                        }
+                                        //console.log("angle",angle,"seg",a, "index", ctr, "pointAng", donePoints[j][b] );
+                                        
+                                        /*
+                                        if(donePoints[j][b].distanceFromCircle >= distBase * 0.98 ) {
+                                            console.log(distBase * 0.98, donePoints[j][b])
+                                            newSet[j][ctr][1] = donePoints[j][b];
+                                        }
+                                        else {
+                                            if('0' in newSet[j][ctr]) {
+                                                //check which of the two is nearer
+                                                let tmp = newSet[j][ctr][0];
+                                                if(tmp.distanceFromCircle >= donePoints[j][b]) {
+                                                    //meaning the one in 0 should be 1
+                                                    newSet[j][ctr][0] = donePoints[j][b];
+                                                    newSet[j][ctr][1] = tmp;
+                                                }
+                                                else {
+                                                    newSet[j][ctr][1] = donePoints[j][b];
+                                                }
+                                            }
+                                            else {
+                                                newSet[j][ctr][0] = donePoints[j][b];
+                                            }
+                                        }
+                                        */
+
+                                    if ('0' in newSet[j][ctr]) {
+                                        //check which of the two is nearer
+                                        let tmp = newSet[j][ctr][0];
+                                        if(tmp.distanceFromCircle >= donePoints[j][b]) {
+                                            //meaning the one in 0 should be 1
+                                            newSet[j][ctr][0] = donePoints[j][b];
+                                            newSet[j][ctr][1] = tmp;
+                                        }
+                                        else {
+                                            newSet[j][ctr][1] = donePoints[j][b];
+                                        }
+                                    }
+                                    else {
+                                        if(donePoints[j][b].minDist <= distBase * 0.98 || donePoints[j][b].distanceFromCircle <= distBase * 0.98) {
+                                            newSet[j][ctr][0] = donePoints[j][b];
+                                        }
+                                        else {
+                                            newSet[j][ctr][1] = donePoints[j][b];
+                                        }
+                                    }
+
                                         doneInPoints.push(b);
-                                        newSet[j][ctr].push(donePoints[j][b]);
+                                        
+                                        
                                     }
                                 }
-                                if(doneInPoints.length==donePoints[j].length) break;
+                                //if(doneInPoints.length==donePoints[j].length) break;
+                                if(rejectAll)  {
+                                    console.log('had to break')
+                                    started = false;
+                                    break;
+                                }
+                            }
+
+                            if(rejectAll)  {
+                                started = false;
+                                break;
                             }
                         }
+                        
+                        if(rejectAll)  {
+                            started = false;
+                            break;
+                        }
+
+                        
                         console.log(newSet);
+
+                        let bits = {};
+                            for(let i = 0; i<6; i++) {
+                                let bitPart = '000000000'.split("");
+                                //close
+                                if('0' in newSet[i][2]) bitPart[8] = '1'
+                                if('0' in newSet[i][3]) bitPart[7] = '1'
+                                if('0' in newSet[i][4]) bitPart[6] = '1'
+                                if('0' in newSet[i][5]) bitPart[5] = '1'
+                                if('0' in newSet[i][6]) bitPart[4] = '1'
+                                if('0' in newSet[i][7]) bitPart[3] = '1'
+                                //far
+                                if('1' in newSet[i][4]) bitPart[0] = '1'
+                                if('1' in newSet[i][5]) bitPart[1] = '1'
+                                if('1' in newSet[i][6]) bitPart[2] = '1'
+                             
+                                console.log("i", i, bitPart.join(''));
+                                bits[i] = String(parseInt(bitPart.join(''),2)).padStart(3,'0');
+                            }
+    
+                                console.log(bits);
+    
+                                /*
+        //Number Conversion
+        $topleft = substr($idnum, 0, 3);            1 0
+        $topright = substr($idnum, 3, 3);           2 1
+        $left = substr($idnum, 6, 3);               3 2
+        $right = substr($idnum, 9, 3);              4 3
+        $bottomleft = substr($idnum, 12, 3);        5 4
+        $bottomright = substr($idnum, 15, 3);     6 5
+        */
+                                let finalString = '';
+                                //findBase[0] == right marker == right
+                                //findBase[1] == left marker == bottom right
+    
+                                let _right = findBase[0];
+                                let _bRight = findBase[1];
+                                let _tLeft = _right + 2;
+                                //let _tRight = 
+                                
+                                console.log(bits[findBase[0]], bits[findBase[1]]);
+                                //finalString = bits[]
+
                     }
                     else {
                         started = false;
@@ -506,12 +694,15 @@ function picker() {
             return false;
            }
            */
+          
+          src.delete(); img.delete(); dst.delete(); hierarchy.delete(); contours.delete();
+
         }
 
         var mido = function() {
           //draw the stream to the canvas
           stream.getContext('2d').drawImage(video, 0, 0, 640, 480);
-
+            
             if(!started) stat();
           
             //makesure it loops back
