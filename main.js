@@ -96,7 +96,7 @@ var stat = function() {
             }
 
             let circle = cv.minEnclosingCircle(tmp);
-            if( circle.radius >= 130 && circle.radius <= 162) {
+            if( circle.radius >= 100 && circle.radius <= 162) {
                 poly.push_back(tmp);
                 circles.push(circle)
                 cv.circle(src, circle.center, circle.radius, color)
@@ -122,7 +122,7 @@ var stat = function() {
         circlesDistance = Math.abs(circles[0]['radius'] - circles[1]['radius']);
         const newRadius = biggestCircle.radius + (circlesDistance * 1.5);
         
-        if (circlesDistance<8 || circlesDistance>15) {
+        if (circlesDistance<6 || circlesDistance>15) {
             console.log('not within range');
             rejectAll = true;
             return;
@@ -333,7 +333,7 @@ var stat = function() {
                             `);
                             */
                             
-                            if(Math.abs(lineDist - donePoints[j][b].distanceFromCircle) <= circlesDistance * 0.9)  {
+                            if(Math.abs(lineDist - donePoints[j][b].distanceFromCircle) <= circlesDistance * 0.8)  {
                                 newSet[j][ctr][0] = donePoints[j][b]
                             }
                             else {  
@@ -394,7 +394,7 @@ $bottomright = substr($idnum, 15, 3);     6 5
                     let _right = (_bLeft + 4) % 6;
 
                     let finalString = `${bits[_tLeft]}${bits[_tRight]}${bits[_left]}${bits[_right]}${bits[_bLeft]}${bits[_bRight]}`;
-                    document.querySelector('#name').innerHTML(finalString);
+                    document.querySelector('#text').textContent = finalString;
             
             started = true;
         }
@@ -420,6 +420,7 @@ $bottomright = substr($idnum, 15, 3);     6 5
 
         var mido = function() {
           //draw the stream to the canvas
+          alert(video.width);
           stream.getContext('2d').drawImage(video, 0, 0, 640, 480);
             
             if(!started) stat();
