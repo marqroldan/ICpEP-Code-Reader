@@ -1,5 +1,7 @@
  import './blobdetect.js'
  
+ var _width = 0;
+ var _height = 0;
  
  function webcam() {
     navigator.mediaDevices.getUserMedia({ video: true })
@@ -7,7 +9,14 @@
         video.srcObject = stream;
         video.onloadedmetadata = function(e) {
             video.play();
-            alert(this.videoWidth);
+            _width = this.videoWidth;
+            _height = this.videoHeight;
+
+            document.querySelector('#stream').width = _width;
+            document.querySelector('#stream').height = _height;
+            document.querySelector('#edit').width = _width;
+            document.querySelector('#edit').height = _height;
+
             mido();
         };
     });
@@ -250,11 +259,12 @@ var stat = function() {
             cv.imshow('edit', src);
 
             //findBase[0] - (findBase[1] % 6) should always be positive
+            /*
             if(findBase[0] - (findBase[1] % 6) < 0) {
                 console.log('Wrong direction');
                 started = false;
                 return
-            }                        
+            } */                       
             console.log("findBase", findBase);
             console.log("donePoints", donePoints);
             console.log("distBase", distBase);
@@ -386,9 +396,11 @@ $left = substr($idnum, 6, 3);               3 2
 $right = substr($idnum, 9, 3);              4 3
 $bottomleft = substr($idnum, 12, 3);        5 4
 $bottomright = substr($idnum, 15, 3);     6 5
-*/
-                    let _bLeft = findBase[0];
-                    let _bRight = findBase[1];
+*/                  
+
+                    let highestSide = Math.max(...findBase);
+                    let _bLeft = highestSide;
+                    let _bRight = (highestSide +5) % 6;
                     let _tLeft = (_bLeft + 2) % 6;
                     let _tRight = (_bLeft + 3) % 6;
                     let _left = (_bLeft + 1) % 6;
@@ -421,7 +433,9 @@ $bottomright = substr($idnum, 15, 3);     6 5
 
         var mido = function() {
           //draw the stream to the canvas
-          stream.getContext('2d').drawImage(video, 0, 0, 640, 480);
+          stream.getContext('2d').drawImage(video, 0, 0, _width, _height);
+
+
             
             if(!started) stat();
           
