@@ -37,11 +37,11 @@ var stat = function() {
     cv.cvtColor(img, img, cv.COLOR_RGBA2GRAY, 0);
     cv.threshold(img, img, 90,  255, cv.THRESH_BINARY);
     cv.imshow('edit', img);
-   
+    /*
     started = false;
     src.delete(); dst.delete();  img.delete(); 
     return
-    
+    */
     let contours = new cv.MatVector();
     let hierarchy = new cv.Mat();
     let poly = new cv.MatVector();
@@ -67,11 +67,25 @@ var stat = function() {
         //centroids.push({x: moment.m10/moment.m00, y: moment.m01/moment.m00});
         cv.approxPolyDP(cnt, tmp, 30, true);
         let vertices = tmp.size().width * tmp.size().height
-        if(vertices >= 6 || vertices <= 10)  {
+        if(vertices == 6)  {
+            let vertDist = [];
+            for(let k = 0; k < 3; k++) {
+                const [x1, y1] = tmp.intPtr(k);
+                const [x2, y2] = tmp.intPtr(k+3);
+                vertDist.push(Math.hypot(x2-x1, y2-y1));
+            }
+
+            if(Math.max(...vertDist) - Math.min(...vertDist) >= 12) {
+                rejectAll = true;
+                console.log(Math.max(...vertDist) - Math.min(...vertDist))
+                break;
+            }
+
             let circle = cv.minEnclosingCircle(tmp);
             if( circle.radius >= 130 && circle.radius <= 300) {
                 circles.push(circle);
                 poly.push_back(tmp);
+                cv.circle(src, circle.center, circle.radius, color)
                 cv.drawContours(src, poly, polyCount, color, 1, 8, hierarchy, 0);
                 polyCount++;
             }
@@ -80,14 +94,13 @@ var stat = function() {
         if(i==contours.size()-1) {
             started = false;
         }
-        //test
-        //let tmp2 = new cv.Mat();
-        //let cnt2 = contours.get(i);
-        //cv.approxPolyDP(cnt2, tmp2, 0, true);
-        //poly2.push_back(tmp2);
-        //cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
-        //cv.imshow('edit', src);
-        //cnt2.delete(); tmp2.delete();
+    }
+
+    if(rejectAll) {
+        trash();
+        started = false;
+        rejectAll = false;
+        return;
     }
 
     function doCheck() {
@@ -144,13 +157,14 @@ var stat = function() {
 
         //Looping to check the dots
         for (let i = 0; i < contours.size(); ++i) {
-            if(findBase.length>2 || rejectAll) {
+            if(findBase.length>2) {
+                console.log('Break daw');
                 started = false;
                 break;
             }
             let cnt = contours.get(i);
             let bound = cv.boundingRect(cnt);
-            const area = bound.width * bound.height;
+            const area = cv.contourArea(cnt);
             if((area > (Math.PI * Math.pow((circlesDistance/2) * 1.75,2))) || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.25,2)))) continue;
             
             let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
@@ -185,9 +199,8 @@ var stat = function() {
             }
             const minDist = Math.hypot(minx, miny);
             const distanceFromCircle = Math.hypot(xc,yc)
-
             if(distanceFromCircle <= newRadius) {
-                console.log('called 1');
+                console.log('Dots');
                 let lastx = 0;
                 let lasty = 0;
                 // j is the segment number
@@ -211,17 +224,7 @@ var stat = function() {
                     //xDiff
                     const xDiff = xc - segments[j].startPoint[0];
                     const deets = {
-                        bound,
-                        xc,
-                        yc,
-                        area,
-                        distLast,
-                        angle,
-                        xDiff,
-                        minDist,
-                        pointSlope,
-                        distanceFromCircle,
-                        distanceFromStart,
+                        bound, xc, yc, area, distLast, angle, xDiff, minDist, pointSlope, distanceFromCircle, distanceFromStart,
                     }
                     //check if slopes are equal and also within the radius
                     if (  
@@ -241,6 +244,7 @@ var stat = function() {
                             donePoints[j].push(deets);
                             polyCirc.push_back(cnt);
                             cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
+                            cv.imshow('edit', src);
                         }
                         break;
                     }
@@ -249,6 +253,7 @@ var stat = function() {
             if(i==contours.size()-1) {
                 started = true;
                 sorting();
+                console.log('called 1');
             }
         }
     }
@@ -261,7 +266,7 @@ var stat = function() {
             if(findBase[0] - (findBase[1] % 6) < 0) {
                 console.log('Wrong direction');
                 started = false;
-                break;
+                return
             }                        
             console.log("findBase", findBase);
             console.log("distBase", distBase);
