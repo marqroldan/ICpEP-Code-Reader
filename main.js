@@ -68,7 +68,7 @@ function picker() {
 
             */
             started = true;
-            let status_ = false;
+            
             let src = cv.imread('stream');
             let img = cv.imread('stream');
             let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
@@ -102,7 +102,7 @@ function picker() {
                 //let moment = cv.moments(cnt, false);
                 //centroids.push({x: moment.m10/moment.m00, y: moment.m01/moment.m00});
 
-                cv.approxPolyDP(cnt, tmp, 20, true);
+                cv.approxPolyDP(cnt, tmp, 30, true);
                 let vertices = tmp.size().width * tmp.size().height
 
                 if(vertices >= 6 || vertices <= 10)  {
@@ -116,7 +116,6 @@ function picker() {
                 }
                 cnt.delete(); tmp.delete();
                 if(i==contours.size()-1) {
-                    status_ = false;
                     started = false;
                 }
                 //test
@@ -225,17 +224,36 @@ function picker() {
             //img = src.roi(croppingRect);
 
             let donePoints = {};
+            let findBase = [];
+
+
+
+            console.log(circlesDistance, Math.PI * Math.pow((circlesDistance),2), circlesDistance/2, Math.PI * Math.pow((circlesDistance/2),2));
+
 
             for (let i = 0; i < contours.size(); ++i) {
-                let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-                Math.round(Math.random() * 255));
                 let cnt = contours.get(i);
                 let bound = cv.boundingRect(cnt);
                 const area = bound.width * bound.height;
                 //if(bound.width * bound.height > (Math.PI * Math.pow(circlesDistance,2)) || bound.width * bound.height < (Math.PI * Math.pow(circlesDistance*0.5,2))) continue;
                 
                 // || area < Math.pow(circlesDistance*0.4,2) 
-                if((area > (Math.PI * Math.pow(circlesDistance,2)))) continue;
+                //|| area < (Math.PI * Math.pow((circlesDistance/2)*0.8,2))
+                // || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.88,2)))
+                // || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.5,2)))
+                
+                //Getting rid of large and really small shapes part 1
+                if((area > (Math.PI * Math.pow((circlesDistance/2) * 1.75,2))) || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.25,2)))) continue;
+                //Getting rid of unwanted shapes part 2
+                /*
+                if(!(bound.width >= (circlesDistance * 0.5) && bound.width <= (circlesDistance * 1.5) && bound.height >= (circlesDistance * 0.5) && bound.width <= (circlesDistance * 1.5))) {
+                    console.log(bound.width, bound.height);
+                    continue;
+                }*/
+                
+                let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
+                Math.round(Math.random() * 255));
+
 
                 //console.log(bound.width * bound.height, (Math.PI * Math.pow(circlesDistance*0.5,2)))
                 let xc = bound.x + (bound.width/2);
@@ -249,8 +267,22 @@ function picker() {
 
                 if(distanceFromCircle <= newRadius) {
 
+                let lastx = 0;
+                let lasty = 0;
                 // j is the segment number
                 for(let j = 0; j<6; j++) {
+                    let distLast = 0;
+                    if( lastx==0 && lasty==0) {
+                        lastx = segments[j].startPoint[0];
+                        lasty = segments[j].startPoint[1];
+                    }
+                    else {
+                        //get distance of last x and last y vs new points and replace lastx and lasty
+                        distLast = Math.hypot(segments[j].startPoint[0] - lastx, segments[j].startPoint[1] - lasty);
+                        lastx = segments[j].startPoint[0];
+                        lasty = segments[j].startPoint[1];
+                        if (distLast < (circlesDistance * 0.8)) continue;
+                    }
                     if(!(j in donePoints)) donePoints[j] = [];
 
                     let pointSlope = (segments[j].startPoint[1] - yc) / (segments[j].startPoint[0] - xc);
@@ -262,24 +294,30 @@ function picker() {
                     const xDiff = xc - segments[j].startPoint[0];
 
                     const deets = {
+                        bound,
                         xc,
                         yc,
+                        area,
+                        distLast,
                         angle,
                         xDiff,
                         pointSlope,
                         distanceFromCircle,
                         distanceFromStart,
                     }
-
-                    
-
                     //check if slopes are equal and also within the radius
                     if (  
-                        distanceFromCircle <= newRadius && ((pointSlope*segments[j].slope > 0) && angle <= segments[j].angle) || angle <  7
+                        distanceFromCircle <= newRadius && (((pointSlope*segments[j].slope > 0) && angle <= segments[j].angle) || angle <  7) && 
+                        (bound.width >= (circlesDistance * 0.5) && bound.width <= (circlesDistance * 1.5) && bound.height >= (circlesDistance * 0.5) && bound.width <= (circlesDistance * 1.5))
                     ) {
-                        donePoints[j].push(deets);
-                        polyCirc.push_back(cnt);
-                        cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
+                        if(angle < 7) {
+                            findBase.push(j);
+                        }
+                        else {
+                            donePoints[j].push(deets);
+                            polyCirc.push_back(cnt);
+                            cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
+                        }
                         break;
                     }
                     else {
@@ -297,15 +335,49 @@ function picker() {
                 }
 
 
-
+                let newSet = {};
                 if(i==contours.size()-1) {
-                    cv.imshow('edit', src);
-                    console.log(donePoints);
+                    if(findBase.length == 2) {
+                        cv.imshow('edit', src);
+                        console.log(findBase);
+                        console.log("donePoints", donePoints);
+                        started = true;
+                        //loop through the segments
+                        for(let j = 0; j<6; j++) {
+                            //Check if the points in the segments contain only 9 or less
+                            if(donePoints[j].length > 9) {
+                                started = false;
+                                break;
+                            }
+                            if(!(j in newSet)) newSet[j] = {};
+                            let doneInPoints = [];
 
-                    status_ = true;
-                    started = true;
+                            let angle = segments[j].angle;
+                            let startAngle = (angle * 0.23227383863);
+                            let increment = (angle - startAngle) / 8;
+                            console.log(donePoints[j], donePoints[j].length);
+                            for(let a = startAngle, ctr = 0; a < angle; a+=increment, ctr++) {
+                                if(!(ctr in newSet[j])) newSet[j][ctr] = [];
+                                for(let b = 0; b < donePoints[j].length; b++) {
+                                    if (doneInPoints.includes(b))continue;
+                                    if (donePoints[j][b].angle <= a) {
+                                        console.log("angle",angle,"seg",a, "index", ctr, "pointAng", donePoints[j][b] );
+                                        doneInPoints.push(b);
+                                        newSet[j][ctr].push(donePoints[j][b]);
+                                    }
+                                }
+                                if(doneInPoints.length==donePoints[j].length) break;
+                            }
+                        }
+                        console.log(newSet);
+                    }
+                    else {
+                        started = false;
+                    }
+                    
                 }
             }
+        }
             /*
             if( (bound.width >= circlesDistance -3 && bound.width <= circlesDistance + 3 ) && 
             (bound.height >= circlesDistance && bound.height <= circlesDistance + 3 ) ) {
@@ -386,7 +458,6 @@ function picker() {
             }*/
 
 
-        }
 
 
             /*
