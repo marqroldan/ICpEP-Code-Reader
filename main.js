@@ -75,9 +75,8 @@ var stat = function() {
                 vertDist.push(Math.hypot(x2-x1, y2-y1));
             }
 
-            if(Math.max(...vertDist) - Math.min(...vertDist) >= 12) {
+            if(Math.max(...vertDist) - Math.min(...vertDist) > 6) {
                 rejectAll = true;
-                console.log(Math.max(...vertDist) - Math.min(...vertDist))
                 break;
             }
 
@@ -125,12 +124,10 @@ var stat = function() {
         for(let i = 0; i<6; i++) {
             const startPoint = [
                 biggestHexagon.intPtr(i%6)[0] - biggestCircle.center.x,
-                //y: (startPoint[1] > biggestCircle.center.y) ? biggestCircle.center.y - startPoint[1] : startPoint[1] - biggestCircle.center.y,
                 biggestCircle.center.y - biggestHexagon.intPtr(i%6)[1],
             ]
             const endPoint = [
                 biggestHexagon.intPtr((i+1)%6)[0] - biggestCircle.center.x,
-                //y: (endPoint[1] > biggestCircle.center.y) ? biggestCircle.center.y - endPoint[1] : endPoint[1] - biggestCircle.center.y,
                 biggestCircle.center.y - biggestHexagon.intPtr((i+1)%6)[1],
             ];
             const slope = (endPoint[1] - startPoint[1]) / (endPoint[0] - startPoint[0]);
@@ -141,18 +138,12 @@ var stat = function() {
             const dy = startPoint[1] - endPoint[1];
             const distSP = Math.hypot(dx,dy) / 2;
             const angle = 2 * (180/Math.PI) * (Math.asin(distSP/distCP));
-            segments.push( {
-                startPoint,
-                endPoint,
-                slope,
-                hyp: distCP,
-                angle
-            });
+            segments.push( {startPoint, endPoint, slope, hyp: distCP, angle });
         }
         console.log("Segments", segments);
 
         let donePoints = {};
-        let findBase = [];
+        var findBase = [];
         let distBase = 0;
 
         //Looping to check the dots
@@ -164,40 +155,13 @@ var stat = function() {
             }
             let cnt = contours.get(i);
             let bound = cv.boundingRect(cnt);
-            const area = cv.contourArea(cnt);
+            const moment = cv.moments(cnt);
+            const area = moment.m00;
             if((area > (Math.PI * Math.pow((circlesDistance/2) * 1.75,2))) || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.25,2)))) continue;
             
-            let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-            Math.round(Math.random() * 255));
-            //console.log(bound.width * bound.height, (Math.PI * Math.pow(circlesDistance*0.5,2)))
-            let xc = bound.x + (bound.width/2);
-            let yc = bound.y + (bound.height/2);
-            let minx = 0;
-            let miny = 0;
-            //wrt to circle
-            xc = xc - biggestCircle.center.x;
-            yc = biggestCircle.center.y - yc;
-            if(bound.x > 0 ) {
-                if(bound.y > 0) {
-                    minx = xc - (bound.width/2);
-                    miny = yc + (bound.height/2);
-                }
-                else {
-                    minx = xc - (bound.width/2);
-                    miny = yc - (bound.height/2);
-                }
-            }
-            else {
-                if(bound.y > 0) {
-                    minx = xc + (bound.width/2);
-                    miny = yc + (bound.height/2);
-                }
-                else {
-                    minx = xc + (bound.width/2);
-                    miny = yc - (bound.height/2);
-                }
-            }
-            const minDist = Math.hypot(minx, miny);
+            let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),Math.round(Math.random() * 255));
+            let xc = moment.m10/moment.m00 - biggestCircle.center.x;
+            let yc = biggestCircle.center.y - moment.m01/moment.m00;
             const distanceFromCircle = Math.hypot(xc,yc)
             if(distanceFromCircle <= newRadius) {
                 console.log('Dots');
