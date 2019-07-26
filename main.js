@@ -23,283 +23,171 @@ function picker() {
         video = document.querySelector('img');
         stream.getContext('2d').drawImage(video, 0, 0, video.width, video.height);
         
-
-        ///Overlay a hexagon mask to limit the area of checking
-
-
     }
 }       
         var started = false;
+        var rejectAll = false;
 
-        var stat = function() {
-            /*
-            let src = cv.imread('stream');
-            let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
-            cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
-            cv.medianBlur(src, src, 5);
-            cv.Canny(src, src, 255, 255, 3);
-            cv.threshold(src, src, 120, 200, cv.THRESH_BINARY);
-            let contours = new cv.MatVector();
-            let hierarchy = new cv.Mat();
-            // You can try more different parameters
-            cv.findContours(src, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-            console.log(contours.size())
-            // draw contours with random Scalar
-            for (let i = 0; i < contours.size(); ++i) {
-                let cnt = contours.get(i);
-                let vertices = cnt.size().width * cnt.size().height;
-
-
-                for(let j = 0; j<vertices; j++) {
-                    const [x,y] = cnt.intPtr(j);
-                    console.log('x',x,'y',y);
-                }
-                //if(vertices < 400) continue;
-                //if(vertices!=24) continue;
-                //if(hierarchy.intPtr(0,i)[3]==-1) continue;
-
-                let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-                                          Math.round(Math.random() * 255));
-                console.log("Vertices:", vertices, "Color:", color, "Hierarchy", hierarchy.intPtr(0,i))
-                cv.drawContours(dst, contours, i, color, 1, cv.LINE_8, hierarchy, 100);
+var stat = function() {
+    started = true;
+    
+    let src = cv.imread('stream');
+    let img = cv.imread('stream');
+    let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
+    cv.cvtColor(img, img, cv.COLOR_RGBA2GRAY, 0);
+    cv.threshold(img, img, 90,  255, cv.THRESH_BINARY);
+    cv.imshow('edit', img);
+   
+    started = false;
+    src.delete(); dst.delete();  img.delete(); 
+    return
+    
+    let contours = new cv.MatVector();
+    let hierarchy = new cv.Mat();
+    let poly = new cv.MatVector();
+    let polyCirc = new cv.MatVector();
+    let poly2 = new cv.MatVector();
+    let circles = [];
+    let segments = [];
+    let polyCount = 0;
+    //let centroids = [];
+    cv.findContours(img, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+    // approximates each contour to polygon
+    for (let i = 0; i < contours.size(); ++i) {
+        //We're only going to look for exactly 2 hexagons.
+        let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
+        Math.round(Math.random() * 255));
+        if(poly.size() == 2)  {
+            doCheck();
+            break;
+        }
+        let tmp = new cv.Mat();
+        let cnt = contours.get(i);
+        //let moment = cv.moments(cnt, false);
+        //centroids.push({x: moment.m10/moment.m00, y: moment.m01/moment.m00});
+        cv.approxPolyDP(cnt, tmp, 30, true);
+        let vertices = tmp.size().width * tmp.size().height
+        if(vertices >= 6 || vertices <= 10)  {
+            let circle = cv.minEnclosingCircle(tmp);
+            if( circle.radius >= 130 && circle.radius <= 300) {
+                circles.push(circle);
+                poly.push_back(tmp);
+                cv.drawContours(src, poly, polyCount, color, 1, 8, hierarchy, 0);
+                polyCount++;
             }
-            cv.imshow('edit', dst);
-            src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
-
-            */
-            started = true;
-            
-            let src = cv.imread('stream');
-            let img = cv.imread('stream');
-            let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
-            cv.cvtColor(img, img, cv.COLOR_RGBA2GRAY, 0);
-            cv.threshold(img, img, 90,  255, cv.THRESH_BINARY);
-            cv.imshow('edit', img);
-            /*
+        }
+        cnt.delete(); tmp.delete();
+        if(i==contours.size()-1) {
             started = false;
-            src.delete(); dst.delete();  img.delete(); 
-            return
-            */
-            //cv.Laplacian(img, img, cv.CV_8U, 1, 1, 0, cv.BORDER_DEFAULT);
-            let contours = new cv.MatVector();
-            let hierarchy = new cv.Mat();
-            let poly = new cv.MatVector();
-            let polyCirc = new cv.MatVector();
-            let poly2 = new cv.MatVector();
-            let circles = [];
-            let segments = [];
-            let polyCount = 0;
-            //let centroids = [];
+        }
+        //test
+        //let tmp2 = new cv.Mat();
+        //let cnt2 = contours.get(i);
+        //cv.approxPolyDP(cnt2, tmp2, 0, true);
+        //poly2.push_back(tmp2);
+        //cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
+        //cv.imshow('edit', src);
+        //cnt2.delete(); tmp2.delete();
+    }
 
+    function doCheck() {
+        //Get the biggest hexagon and the circle 
+        let biggestCircle = circles[0]['radius'] > circles[1]['radius'] ? circles[0] : circles[1];
+        let biggestHexagon = circles[0]['radius'] > circles[1]['radius'] ? poly.get(0) : poly.get(1);
+        let circlesDistance = Math.abs(circles[0]['radius'] - circles[1]['radius']);
+        const newRadius = biggestCircle.radius + (circlesDistance * 4);
+        
+        if (circlesDistance<10) {
+            console.log('too small');
+            started = false;
+            return;
+        }
+        if (circlesDistance>15) {
+            console.log('too big');
+            started = false;
+            return;
+        }
 
-            cv.findContours(img, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+        //Looping for the finding of hexagons
+        for(let i = 0; i<6; i++) {
+            const startPoint = [
+                biggestHexagon.intPtr(i%6)[0] - biggestCircle.center.x,
+                //y: (startPoint[1] > biggestCircle.center.y) ? biggestCircle.center.y - startPoint[1] : startPoint[1] - biggestCircle.center.y,
+                biggestCircle.center.y - biggestHexagon.intPtr(i%6)[1],
+            ]
+            const endPoint = [
+                biggestHexagon.intPtr((i+1)%6)[0] - biggestCircle.center.x,
+                //y: (endPoint[1] > biggestCircle.center.y) ? biggestCircle.center.y - endPoint[1] : endPoint[1] - biggestCircle.center.y,
+                biggestCircle.center.y - biggestHexagon.intPtr((i+1)%6)[1],
+            ];
+            const slope = (endPoint[1] - startPoint[1]) / (endPoint[0] - startPoint[0]);
+            const cx = startPoint[0];
+            const cy = startPoint[1];
+            const distCP = Math.hypot(cx,cy);
+            const dx = startPoint[0] - endPoint[0];
+            const dy = startPoint[1] - endPoint[1];
+            const distSP = Math.hypot(dx,dy) / 2;
+            const angle = 2 * (180/Math.PI) * (Math.asin(distSP/distCP));
+            segments.push( {
+                startPoint,
+                endPoint,
+                slope,
+                hyp: distCP,
+                angle
+            });
+        }
+        console.log("Segments", segments);
 
-            // approximates each contour to polygon
-            for (let i = 0; i < contours.size(); ++i) {
-                //We're only going to look for exactly 2 hexagons.
-                let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-                Math.round(Math.random() * 255));
-                if(poly.size() == 2)  {
-                    doCheck();
-                    break;
-                }
-                let tmp = new cv.Mat();
-                let cnt = contours.get(i);
-                //let moment = cv.moments(cnt, false);
-                //centroids.push({x: moment.m10/moment.m00, y: moment.m01/moment.m00});
+        let donePoints = {};
+        let findBase = [];
+        let distBase = 0;
 
-                cv.approxPolyDP(cnt, tmp, 30, true);
-                let vertices = tmp.size().width * tmp.size().height
-
-                if(vertices >= 6 || vertices <= 10)  {
-                    let circle = cv.minEnclosingCircle(tmp);
-                    if( circle.radius >= 130 && circle.radius <= 300) {
-                        circles.push(circle);
-                        poly.push_back(tmp);
-                        cv.drawContours(src, poly, polyCount, color, 1, 8, hierarchy, 0);
-                        polyCount++;
-                    }
-                }
-                cnt.delete(); tmp.delete();
-                if(i==contours.size()-1) {
-                    started = false;
-                }
-                //test
-
-                //let tmp2 = new cv.Mat();
-                //let cnt2 = contours.get(i);
-
-                //cv.approxPolyDP(cnt2, tmp2, 0, true);
-                //poly2.push_back(tmp2);
-
-                //cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
-
-                //cv.imshow('edit', src);
-
-
-                //cnt2.delete(); tmp2.delete();
-
+        //Looping to check the dots
+        for (let i = 0; i < contours.size(); ++i) {
+            if(findBase.length>2 || rejectAll) {
+                started = false;
+                break;
             }
-
-            function doCheck() {
-            //Get the biggest hexagon and the circle 
-            let biggestCircle = circles[0]['radius'] > circles[1]['radius'] ? circles[0] : circles[1];
-            let biggestHexagon = circles[0]['radius'] > circles[1]['radius'] ? poly.get(0) : poly.get(1);
-            let circlesDistance = Math.abs(circles[0]['radius'] - circles[1]['radius']);
-            const newRadius = biggestCircle.radius + (circlesDistance * 4);
+            let cnt = contours.get(i);
+            let bound = cv.boundingRect(cnt);
+            const area = bound.width * bound.height;
+            if((area > (Math.PI * Math.pow((circlesDistance/2) * 1.75,2))) || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.25,2)))) continue;
             
-            if (circlesDistance<10) {
-                console.log('too small');
-                started = false;
-                return;
-            }
-            if (circlesDistance>15) {
-                console.log('too big');
-                started = false;
-                return;
-            }
-
-
-            //Pie
-            //console.log('Circle Radius',biggestCircle.radius)
-            console.log(biggestCircle);
-
-            for(let i = 0; i<6; i++) {
-                const startPoint = [
-                    biggestHexagon.intPtr(i%6)[0] - biggestCircle.center.x,
-                    //y: (startPoint[1] > biggestCircle.center.y) ? biggestCircle.center.y - startPoint[1] : startPoint[1] - biggestCircle.center.y,
-                    biggestCircle.center.y - biggestHexagon.intPtr(i%6)[1],
-                ]
-
-                const endPoint = [
-                    biggestHexagon.intPtr((i+1)%6)[0] - biggestCircle.center.x,
-                    //y: (endPoint[1] > biggestCircle.center.y) ? biggestCircle.center.y - endPoint[1] : endPoint[1] - biggestCircle.center.y,
-                    biggestCircle.center.y - biggestHexagon.intPtr((i+1)%6)[1],
-                ];
-
-                //wrt to circle center
-                /*
-                startPoint[0] = startPoint[0] - biggestCircle.center.x;
-                startPoint[1] = startPoint[1] - biggestCircle.center.y;
-                endPoint[0] = endPoint[0] - biggestCircle.center.x;
-                endPoint[1] = endPoint[1] - biggestCircle.center.y;*/
-
-
-                const slope = (endPoint[1] - startPoint[1]) / (endPoint[0] - startPoint[0]);
-
-                const cx = startPoint[0];
-                const cy = startPoint[1];
-                const distCP = Math.hypot(cx,cy);
-
-                const dx = startPoint[0] - endPoint[0];
-                const dy = startPoint[1] - endPoint[1];
-                const distSP = Math.hypot(dx,dy) / 2;
-
-                const angle = 2 * (180/Math.PI) * (Math.asin(distSP/distCP));
-
-                segments.push( {
-                    startPoint,
-                    endPoint,
-                    slope,
-                    hyp: distCP,
-                    angle
-                });
-
-               // console.log('Vert:',i,'points',[startPoint,endPoint],'dist hex', distSP, 'dist circ', distCP, 'angle', angle)
-            }
-
-
-            console.log(segments);
-
-            let cropping = {
-                topLeft: {
-                    x: biggestCircle.center.x - biggestCircle.radius - (circlesDistance * 3),
-                    y: biggestCircle.center.y - biggestCircle.radius - (circlesDistance * 3),
-                },
-            }
-            cropping.width = (biggestCircle.center.x + biggestCircle.radius + (circlesDistance * 3)) - cropping.topLeft.x;
-            cropping.height = (biggestCircle.center.y + biggestCircle.radius + (circlesDistance * 3)) - cropping.topLeft.y;
-
-            //Crop the image
-            //let croppingRect = new cv.Rect(cropping.topLeft.x, cropping.topLeft.y, cropping.width, cropping.height);
-            //img = src.roi(croppingRect);
-
-            let donePoints = {};
-            let findBase = [];
-            let distBase = 0;
-            let rejectAll = false;
-
-
-
-           // console.log(circlesDistance, Math.PI * Math.pow((circlesDistance),2), circlesDistance/2, Math.PI * Math.pow((circlesDistance/2),2));
-
-
-            for (let i = 0; i < contours.size(); ++i) {
-                if(findBase.length>2 || rejectAll) {
-                    started = false;
-                    break;
-                }
-                let cnt = contours.get(i);
-                let bound = cv.boundingRect(cnt);
-                const area = bound.width * bound.height;
-                //if(bound.width * bound.height > (Math.PI * Math.pow(circlesDistance,2)) || bound.width * bound.height < (Math.PI * Math.pow(circlesDistance*0.5,2))) continue;
-                
-                // || area < Math.pow(circlesDistance*0.4,2) 
-                //|| area < (Math.PI * Math.pow((circlesDistance/2)*0.8,2))
-                // || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.88,2)))
-                // || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.5,2)))
-                
-                //Getting rid of large and really small shapes part 1
-                if((area > (Math.PI * Math.pow((circlesDistance/2) * 1.75,2))) || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.25,2)))) continue;
-                //Getting rid of unwanted shapes part 2
-                /*
-                if(!(bound.width >= (circlesDistance * 0.5) && bound.width <= (circlesDistance * 1.5) && bound.height >= (circlesDistance * 0.5) && bound.width <= (circlesDistance * 1.5))) {
-                    console.log(bound.width, bound.height);
-                    continue;
-                }*/
-                
-                let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-                Math.round(Math.random() * 255));
-
-
-                //console.log(bound.width * bound.height, (Math.PI * Math.pow(circlesDistance*0.5,2)))
-                let xc = bound.x + (bound.width/2);
-                let yc = bound.y + (bound.height/2);
-
-                //wrt to circle
-                xc = xc - biggestCircle.center.x;
-                yc = biggestCircle.center.y - yc;
-
-                let minx = 0;
-                let miny = 0;
-
-                const distanceFromCircle = Math.hypot(xc,yc)
-
-                if(bound.x > 0 ) {
-                    if(bound.y > 0) {
-                        minx = bound.x;
-                        miny = bound.y + bound.height;
-                    }
-                    else {
-                        minx = bound.x;
-                        miny = bound.y;
-                    }
+            let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
+            Math.round(Math.random() * 255));
+            //console.log(bound.width * bound.height, (Math.PI * Math.pow(circlesDistance*0.5,2)))
+            let xc = bound.x + (bound.width/2);
+            let yc = bound.y + (bound.height/2);
+            let minx = 0;
+            let miny = 0;
+            //wrt to circle
+            xc = xc - biggestCircle.center.x;
+            yc = biggestCircle.center.y - yc;
+            if(bound.x > 0 ) {
+                if(bound.y > 0) {
+                    minx = xc - (bound.width/2);
+                    miny = yc + (bound.height/2);
                 }
                 else {
-                    if(bound.y > 0) {
-                        minx = bound.x + bound.width;
-                        miny = bound.y + bound.height;
-                    }
-                    else {
-                        minx = bound.x + bound.width;
-                        miny = bound.y;
-                    }
+                    minx = xc - (bound.width/2);
+                    miny = yc - (bound.height/2);
                 }
+            }
+            else {
+                if(bound.y > 0) {
+                    minx = xc + (bound.width/2);
+                    miny = yc + (bound.height/2);
+                }
+                else {
+                    minx = xc + (bound.width/2);
+                    miny = yc - (bound.height/2);
+                }
+            }
+            const minDist = Math.hypot(minx, miny);
+            const distanceFromCircle = Math.hypot(xc,yc)
 
-                const minDist = Math.hypot(minx, miny);
-
-                if(distanceFromCircle <= newRadius) {
-
+            if(distanceFromCircle <= newRadius) {
+                console.log('called 1');
                 let lastx = 0;
                 let lasty = 0;
                 // j is the segment number
@@ -317,15 +205,11 @@ function picker() {
                         if (distLast < (circlesDistance * 0.8)) continue;
                     }
                     if(!(j in donePoints)) donePoints[j] = [];
-
                     let pointSlope = (segments[j].startPoint[1] - yc) / (segments[j].startPoint[0] - xc);
-
                     const distanceFromStart = Math.hypot(segments[j].startPoint[0] - xc, segments[j].startPoint[1] - yc);
                     const angle = (180/Math.PI) * (Math.acos((Math.pow(segments[j].hyp,2) + Math.pow(distanceFromCircle,2) - Math.pow(distanceFromStart,2))/(2 * segments[j].hyp * distanceFromCircle)));
-
                     //xDiff
                     const xDiff = xc - segments[j].startPoint[0];
-
                     const deets = {
                         bound,
                         xc,
@@ -346,7 +230,6 @@ function picker() {
                     ) {
                         if(angle < 7) {
                             findBase.push(j);
-
                             if(distBase==0) {
                                 distBase = distanceFromCircle;
                             }
@@ -361,343 +244,169 @@ function picker() {
                         }
                         break;
                     }
-                    /*
-                    else {
-
-                        if(xc > 121 && xc < 121 + 21 && yc > -52 - 21 && yc < -52 ) console.log(deets);
-                        if(xc > 126 - 15 && xc < 121 + 15 && yc > 84 - 10 && yc < 84 + 10 ) console.log(deets);
-
-                        //cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
-                        //if(distanceFromCircle <= newRadius) console.log(deets);
-                        //console.log(deets);
-                    }
-                    */
                 }
+            }
+            if(i==contours.size()-1) {
+                started = true;
+                sorting();
+            }
+        }
+    }
 
-                    //console.log(distanceFromCircle, bound.x + (bound.width/2), bound.y + (bound.height/2))
+    function sorting() {
+        let newSet = {};
+        if(findBase.length == 2) {
+            cv.imshow('edit', src);
+            //findBase[0] - (findBase[1] % 6) should always be positive
+            if(findBase[0] - (findBase[1] % 6) < 0) {
+                console.log('Wrong direction');
+                started = false;
+                break;
+            }                        
+            console.log("findBase", findBase);
+            console.log("distBase", distBase);
+            console.log("donePoints", donePoints);
+            //loop through the segments
+            for(let j = 0; j<6; j++) {
+                //Check if the points in the segments contain only 9 or less
+                if(donePoints[j].length > 9) {
+                    started = false;
+                    break;
                 }
+                if(!(j in newSet)) newSet[j] = {};
 
+                let doneInPoints = [];
+                let angle = segments[j].angle;
+                let startAngle = (angle * 0.31396484375); //0.23227383863
+                let increment = (angle - startAngle) / 8;
 
-                let newSet = {};
-                if(i==contours.size()-1) {
-                    if(findBase.length == 2) {
-                        cv.imshow('edit', src);
+                for(let a = startAngle, ctr = 0; a < angle+(increment/2); a+=increment, ctr++) {
+                    if(!(ctr in newSet[j])) newSet[j][ctr] = {};
 
-                        //findBase[0] - (findBase[1] % 6) should always be positive
-                        if(findBase[0] - (findBase[1] % 6) < 0) {
-                            console.log('Wrong direction');
-                            started = false;
-                            break;
-                        }                        
-                        console.log(findBase);
-                        console.log(distBase);
-                        console.log("donePoints", donePoints);
-                        started = true;
-                        //loop through the segments
-                        for(let j = 0; j<6; j++) {
-                            
-                            //Check if the points in the segments contain only 9 or less
-                            if(donePoints[j].length > 9) {
+                    for(let b = 0; b < donePoints[j].length; b++) {
+                        if (doneInPoints.includes(b)) continue;
+
+                        if (donePoints[j][b].angle <= a) {
+                            //There shouldn't be an item in the before the starting angle
+                            if(ctr==0) {
                                 started = false;
+                                rejectAll = true;
                                 break;
                             }
-                            if(!(j in newSet)) newSet[j] = {};
-                            let doneInPoints = [];
 
-                            let angle = segments[j].angle;
-                            //0.23227383863
-                            let startAngle = (angle * 0.31396484375);
-                            let increment = (angle - startAngle) / 8;
-                            //console.log(donePoints[j], donePoints[j].length);
-                            
-                            for(let a = startAngle, ctr = 0; a < angle+(increment/2); a+=increment, ctr++) {
-                                if(!(ctr in newSet[j])) newSet[j][ctr] = {};
-                                for(let b = 0; b < donePoints[j].length; b++) {
-                                    if (doneInPoints.includes(b)) continue;
-                                    if (donePoints[j][b].angle <= a) {
-                                        //There shouldn't be an item in the before the starting angle
-                                        if(ctr==0) {
-                                            started = false;
-                                            rejectAll = true;
-                                            break;
-                                        }
-
-                                        //Reject if found a very near angle but different section
-                                        if(ctr!=0) {
-                                            for(let key in newSet[j][ctr-1]) {
-                                                if(Math.abs(newSet[j][ctr-1][key].angle - donePoints[j][b].angle) < 3.5) {
-                                                    console.log("BAD ANGLE", j, b, newSet[j][ctr-1][key].angle, donePoints[j][b].angle);
-                                                    rejectAll = true;
-                                                    break;
-                                                }
-                                            }
-                                            if(rejectAll) {
-                                                started = false;
-                                                break;
-                                            }
-                                        }
-
-                                        if(Object.keys(newSet[j][ctr]).length==2) {
-                                            //Rejecting because there are already 2 objects in the same seciton
-                                            rejectAll = true;
-                                            break;
-                                        }
-                                        //console.log("angle",angle,"seg",a, "index", ctr, "pointAng", donePoints[j][b] );
-                                        
-                                        /*
-                                        if(donePoints[j][b].distanceFromCircle >= distBase * 0.98 ) {
-                                            console.log(distBase * 0.98, donePoints[j][b])
-                                            newSet[j][ctr][1] = donePoints[j][b];
-                                        }
-                                        else {
-                                            if('0' in newSet[j][ctr]) {
-                                                //check which of the two is nearer
-                                                let tmp = newSet[j][ctr][0];
-                                                if(tmp.distanceFromCircle >= donePoints[j][b]) {
-                                                    //meaning the one in 0 should be 1
-                                                    newSet[j][ctr][0] = donePoints[j][b];
-                                                    newSet[j][ctr][1] = tmp;
-                                                }
-                                                else {
-                                                    newSet[j][ctr][1] = donePoints[j][b];
-                                                }
-                                            }
-                                            else {
-                                                newSet[j][ctr][0] = donePoints[j][b];
-                                            }
-                                        }
-                                        */
-
-                                    if ('0' in newSet[j][ctr]) {
-                                        //check which of the two is nearer
-                                        let tmp = newSet[j][ctr][0];
-                                        if(tmp.distanceFromCircle >= donePoints[j][b]) {
-                                            //meaning the one in 0 should be 1
-                                            newSet[j][ctr][0] = donePoints[j][b];
-                                            newSet[j][ctr][1] = tmp;
-                                        }
-                                        else {
-                                            newSet[j][ctr][1] = donePoints[j][b];
-                                        }
-                                    }
-                                    else {
-                                        if(donePoints[j][b].minDist <= distBase * 0.98 || donePoints[j][b].distanceFromCircle <= distBase * 0.98) {
-                                            newSet[j][ctr][0] = donePoints[j][b];
-                                        }
-                                        else {
-                                            newSet[j][ctr][1] = donePoints[j][b];
-                                        }
-                                    }
-
-                                        doneInPoints.push(b);
-                                        
-                                        
+                            //Reject if found a very near angle but different section
+                            if(ctr!=0) {
+                                for(let key in newSet[j][ctr-1]) {
+                                    if(Math.abs(newSet[j][ctr-1][key].angle - donePoints[j][b].angle) < 3.5) {
+                                        console.log("BAD ANGLE", j, b, newSet[j][ctr-1][key].angle, donePoints[j][b].angle);
+                                        rejectAll = true;
+                                        break;
                                     }
                                 }
-                                //if(doneInPoints.length==donePoints[j].length) break;
-                                if(rejectAll)  {
-                                    console.log('had to break')
+                                if(rejectAll) {
                                     started = false;
                                     break;
                                 }
                             }
-
-                            if(rejectAll)  {
-                                started = false;
+                            if(Object.keys(newSet[j][ctr]).length==2) {
+                                //Rejecting because there are already 2 objects in the same seciton
+                                rejectAll = true;
                                 break;
                             }
-                        }
-                        
-                        if(rejectAll)  {
-                            started = false;
-                            break;
-                        }
-
-                        
-                        console.log(newSet);
-
-                        let bits = {};
-                            for(let i = 0; i<6; i++) {
-                                let bitPart = '000000000'.split("");
-                                //close
-                                if('0' in newSet[i][2]) bitPart[8] = '1'
-                                if('0' in newSet[i][3]) bitPart[7] = '1'
-                                if('0' in newSet[i][4]) bitPart[6] = '1'
-                                if('0' in newSet[i][5]) bitPart[5] = '1'
-                                if('0' in newSet[i][6]) bitPart[4] = '1'
-                                if('0' in newSet[i][7]) bitPart[3] = '1'
-                                //far
-                                if('1' in newSet[i][4]) bitPart[0] = '1'
-                                if('1' in newSet[i][5]) bitPart[1] = '1'
-                                if('1' in newSet[i][6]) bitPart[2] = '1'
-                             
-                                console.log("i", i, bitPart.join(''));
-                                bits[i] = String(parseInt(bitPart.join(''),2)).padStart(3,'0');
+                            if ('0' in newSet[j][ctr]) {
+                                //check which of the two is nearer
+                                let tmp = newSet[j][ctr][0];
+                                if(tmp.distanceFromCircle >= donePoints[j][b]) {
+                                    //meaning the one in 0 should be 1
+                                    newSet[j][ctr][0] = donePoints[j][b];
+                                    newSet[j][ctr][1] = tmp;
+                                }
+                                else {
+                                    newSet[j][ctr][1] = donePoints[j][b];
+                                }
                             }
-    
-                                console.log(bits);
-    
-                                /*
-        //Number Conversion
-        $topleft = substr($idnum, 0, 3);            1 0
-        $topright = substr($idnum, 3, 3);           2 1
-        $left = substr($idnum, 6, 3);               3 2
-        $right = substr($idnum, 9, 3);              4 3
-        $bottomleft = substr($idnum, 12, 3);        5 4
-        $bottomright = substr($idnum, 15, 3);     6 5
-        */
-                                let finalString = '';
-                                //findBase[0] == right marker == right
-                                //findBase[1] == left marker == bottom right
-    
-                                let _right = findBase[0];
-                                let _bRight = findBase[1];
-                                let _tLeft = _right + 2;
-                                //let _tRight = 
-                                
-                                console.log(bits[findBase[0]], bits[findBase[1]]);
-                                //finalString = bits[]
-
+                            else {
+                                if(donePoints[j][b].minDist <= distBase * 0.98 || donePoints[j][b].distanceFromCircle <= distBase * 0.98) {
+                                    newSet[j][ctr][0] = donePoints[j][b];
+                                }
+                                else {
+                                    newSet[j][ctr][1] = donePoints[j][b];
+                                }
+                            }
+                                doneInPoints.push(b);
+                        }
                     }
-                    else {
+                    //if(doneInPoints.length==donePoints[j].length) break;
+                    if(rejectAll)  {
+                        console.log('Had to break')
                         started = false;
+                        break;
                     }
-                    
                 }
+                /*
+                if(rejectAll)  {
+                    started = false;
+                    break;
+                }*/
             }
-        }
-            /*
-            if( (bound.width >= circlesDistance -3 && bound.width <= circlesDistance + 3 ) && 
-            (bound.height >= circlesDistance && bound.height <= circlesDistance + 3 ) ) {
-            }
-            */
-           /*
-
-            if(bound.x >= cropping.topLeft.x && bound.x <= cropping.topLeft.x+cropping.width && bound.y >= cropping.topLeft.y && bound.y <= cropping.topLeft.y+cropping.height) {
-                if( 
-                //(bound.width >= (circlesDistance * 0.7) && bound.width <= (circlesDistance * 1.3)  && bound.height >= (circlesDistance * 0.7) && bound.height <= (circlesDistance * 1.3)) 
-                //&& 
-                (bound.width * bound.height >= Math.pow((circlesDistance * 0.5),2) && bound.width * bound.height <= Math.pow((circlesDistance * 1.5),2) ) 
-                && 
-                (bound.width / bound.height >= 0.8 && bound.width/bound.height <= 1.2)
-                )
-                {
-                polyCirc.push_back(cnt);
-                cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
-                }
-            }
-            */
             
-
-            
-
-            //cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
-
-            /*
-            let contours1 = new cv.MatVector();
-            cv.findContours(img, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
-            // approximates each contour to polygon
-            for (let i = 0; i < contours.size(); ++i) {
-                let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-                                          Math.round(Math.random() * 255));
-                cv.drawContours(img, contours, i, color, 1, 8, hierarchy, 0);
-                cv.imshow('edit', img);
+            if(rejectAll)  {
+                started = false;
+                //leave sorting function
+                return;
             }
-
-            //Let's do another contour checking 
-
-            //square on the vertices 
-            //(circlesDistance * 2.91) => diagonal distance of the square
-            //center is at the vertex
             
-            /*
-            let vercs = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
-            //loop through the vertices of 
-            for(let i = 0; i<6; i++) {
-                const [x, y] = biggestHexagon.intPtr(i);
-
-            }
-
-
-
-            //Loops through the 2 polygons; there should only be exactly 2 hexagons.
-            /*
-            for(let i = 0; i < poly.size(); i++) {
-                let cnt = poly.get(i);
-                circle = circles[i];
-                let circleColor = new cv.Scalar(255, 0, 0);
-                cv.circle(src, circle.center, circle.radius, circleColor);
-                let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-                                          Math.round(Math.random() * 255));
-
-                for(let j = 0; j<cnt.size().width * cnt.size().height; j++) {
-                    const [x,y] = cnt.intPtr(j);
-                }
-                console.log("Color:", color)
-                cv.drawContours(src, poly, i, color, 1, 8, hierarchy, 0);
+            console.log(newSet);
+            let bits = {};
+                for(let i = 0; i<6; i++) {
+                    let bitPart = '000000000'.split("");
+                    //close
+                    if('0' in newSet[i][1]) bitPart[8] = '1'
+                    if('0' in newSet[i][2]) bitPart[7] = '1'
+                    if('0' in newSet[i][3]) bitPart[6] = '1'
+                    if('0' in newSet[i][4]) bitPart[5] = '1'
+                    if('0' in newSet[i][5]) bitPart[4] = '1'
+                    if('0' in newSet[i][6]) bitPart[3] = '1'
+                    //far
+                    if('1' in newSet[i][4]) bitPart[0] = '1'
+                    if('1' in newSet[i][5]) bitPart[1] = '1'
+                    if('1' in newSet[i][6]) bitPart[2] = '1'
                 
-                if(i==poly.size()-1) {
-                    dst = src.roi(croppingRect);
-                    cv.imshow('edit', dst);
-                    poly.delete();
-                    src.delete(); dst.delete(); hierarchy.delete(); contours.delete();
-                    return foundT;
+                    console.log("i", i, bitPart.join(''));
+                    bits[i] = String(parseInt(bitPart.join(''),2)).padStart(3,'0');
                 }
-            }*/
 
+                    console.log(bits);
 
-
-
-            /*
-           if (poly.size()>0) {
-
-            // draw contours with random Scalar
-            for (let i = 0; i < poly.size(); ++i) {
-                let xc = poly.get(i);
-                let vertices = (xc.size().width * xc.size().height);
-                if(vertices!=6) continue;
-                let vals = [];
-                 
-                for(let j = 0; j<3; j++) {
-                     const startPoint = {
-                         x: xc.intPtr(j)[0],
-                         y: xc.intPtr(j)[1],
-                     }
-                     const endPoint = {
-                         x: xc.intPtr(j+3)[0],
-                         y: xc.intPtr(j+3)[1],
-                     }
- 
-                     const distance = Math.hypot(Math.abs(startPoint.x - endPoint.x), Math.abs(startPoint.y - endPoint.y));
- 
-                     vals.push(distance);
- 
-                    console.log('start',startPoint,'end',endPoint, 'distance', distance);
-                }
- 
-                let vals_min = Math.min(...vals);
-                vals.forEach(function(val) {
-                     console.log("difference", Math.abs(vals_min-val), "<10? ", Math.abs(vals_min-x) <= 2)
-                });
-                let ok = vals.every(x=>Math.abs(vals_min-x) <= 10);
- 
-                if(ok) console.log("OK?", ok, "Vertices:", vertices, "Color:", color, "Hierarchy", hierarchy.intPtr(0,i))
-                if(ok) 
-            }
-            cv.imshow('edit', src);
-            poly.delete();
-            return true;
-           }
-           else {
-            src.delete(); dst.delete(); hierarchy.delete(); contours.delete();
-            poly.delete();
-            return false;
-           }
-           */
-          
-          src.delete(); img.delete(); dst.delete(); hierarchy.delete(); contours.delete();
-
+                    /*
+//Number Conversion
+$topleft = substr($idnum, 0, 3);            1 0
+$topright = substr($idnum, 3, 3);           2 1
+$left = substr($idnum, 6, 3);               3 2
+$right = substr($idnum, 9, 3);              4 3
+$bottomleft = substr($idnum, 12, 3);        5 4
+$bottomright = substr($idnum, 15, 3);     6 5
+*/
+                    let finalString = '';
+                    let _right = findBase[0];
+                    let _bRight = findBase[1];
+                    let _tLeft = _right + 2;
+                    console.log(bits[findBase[0]], bits[findBase[1]]);
         }
+        else {
+            started = false;
+        }
+        
+    }
+
+
+
+    function trash() {
+        src.delete(); img.delete(); dst.delete(); hierarchy.delete(); contours.delete();
+    }
+
+    trash();
+}
 
         var mido = function() {
           //draw the stream to the canvas
@@ -718,65 +427,3 @@ function picker() {
 
         
     document.addEventListener('DOMContentLoaded', picker);
-
-
-    
-
-    /*
-    let src = cv.imread('stream');
-    console.log(simpleBlobDetector(src));
-    
-    cv.cvtColor(src, src, cv.COLOR_RGBA2RGB);
-    let dst = new cv.Mat();
-    let M = new cv.Mat();
-    let ksize = new cv.Size(5, 5);
-    // You can try more different parameters
-    M = cv.getStructuringElement(cv.MORPH_CROSS, ksize);
-    cv.morphologyEx(src, dst, cv.MORPH_GRADIENT, M);
-    console.log(dst);
-    src.delete(); dst.delete(); M.delete();
-
-    ///////////////////////////////////////////////////
-
-
-    let src = cv.imread('stream');
-    let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
-    let lines = new cv.Mat();
-    let color = new cv.Scalar(255, 0, 0);
-    cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
-    cv.Canny(src, src, 50, 200, 3);
-    // You can try more different parameters
-    cv.HoughLinesP(src, lines, 1, Math.PI / 180, 2, 0, 0);
-    console.log(lines.data32S);
-    // draw lines
-    for (let i = 0; i < lines.rows; ++i) {
-        let startPoint = new cv.Point(lines.data32S[i * 4], lines.data32S[i * 4 + 1]);
-        let endPoint = new cv.Point(lines.data32S[i * 4 + 2], lines.data32S[i * 4 + 3]);
-        cv.line(dst, startPoint, endPoint, color);
-    }
-    cv.imshow('edit', dst);
-    src.delete(); dst.delete(); lines.delete();
-    */
-
-
-    //This is a better code for detecting features
-   /*
-    let src = cv.imread('stream');
-    let dst = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC3);
-    cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
-                cv.Canny(src, src, ts1, ts2, aperture);
-    //cv.threshold(src, src, fx, fy, cv.THRESH_BINARY);
-    let contours = new cv.MatVector();
-    let hierarchy = new cv.Mat();
-    // You can try more different parameters
-    cv.findContours(src, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
-    // draw contours with random Scalar
-    console.log(contours.size());
-    for (let i = 0; i < contours.size(); ++i) {
-        let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
-                                Math.round(Math.random() * 255));
-        cv.drawContours(dst, contours, i, color, 1, cv.LINE_8, hierarchy, 100);
-    }
-    cv.imshow('edit', dst);
-    src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
-    */
