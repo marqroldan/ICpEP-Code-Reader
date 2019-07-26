@@ -420,7 +420,7 @@ $bottomright = substr($idnum, 15, 3);     6 5
 
         var mido = function() {
           //draw the stream to the canvas
-          alert(video.width);
+          alert(stream.getVideoTracks()[0].getSettings().width);
           stream.getContext('2d').drawImage(video, 0, 0, 640, 480);
             
             if(!started) stat();
