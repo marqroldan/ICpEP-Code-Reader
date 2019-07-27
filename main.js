@@ -363,16 +363,111 @@ var stat = function() {
                         let circRatioDiff = Math.abs((point.distanceFromCircle/distBaseAverage) - distFromCircleMultiplier[k]);
                         let startRatioDiff = Math.abs((point.distanceFromStart / segments[j].segLength) - distFromStartMultiplier[k]);
 
-                        if(startRatioDiff <= 0.0255) {
+                        if(startRatioDiff <= 0.025) {
                             newSet[j][k][0] = point;
                             doneInPoints.push(p);
+                        
+                            console.log(`
+                            Segment: ${j}
+                            Frac: ${k}
+                            Point: ${p}
+                            distBaseAverage ${distBaseAverage}
+                            Circle Diameter ${circlesDistance}
+                            CIrcle Radius ${circlesDistance/2}
+    
+                            Circle Distance ${point.distanceFromCircle}
+                            Ratio ${point.distanceFromCircle/distBaseAverage}
+                            Treshold ${distFromCircleMultiplier[k]}
+                            Allowance ${distBaseAllowance}
+    
+                            Start Distance ${point.distanceFromStart}
+                            Ratio ${point.distanceFromStart / segments[j].segLength}
+                            Threshold ${distFromStartMultiplier[k]}
+    
+                            Coords ${point.bound.x}, ${point.bound.y}
+                            Centroid ${point.xc}, ${point.yc}
+                            Condition: 
+                            Condition Result: ${distFromCircleMultiplier[k]  <= (point.distanceFromCircle/(distBaseAverage-distBaseAllowance))
+                                 && distFromCircleMultiplier[k]  >= (point.distanceFromCircle/(distBaseAverage+distBaseAllowance))}
+    
+                            PcondRes1 ${(point.distanceFromCircle/(distBaseAverage+distBaseAllowance))}
+                            PcondRes2 ${(point.distanceFromCircle/(distBaseAverage-distBaseAllowance))}
+    
+                            Point Distance Minus Allowance Divided by Average 
+                            Minus ${(point.distanceFromCircle - distBaseAllowance) / distBaseAverage}
+                            Plus ${(point.distanceFromCircle + distBaseAllowance) / distBaseAverage}
+    
+                            Pcond1 ${distFromCircleMultiplier[k]  <= (point.distanceFromCircle/(distBaseAverage-distBaseAllowance))}
+                            Pcond2 ${distFromCircleMultiplier[k]  >= (point.distanceFromCircle/(distBaseAverage+distBaseAllowance))}
+    
+                            //Difference checking
+    
+                            Circ Diff ${Math.abs(point.distanceFromCircle - distBaseAverage)}
+                            Circ Ratio Diff ${Math.abs((point.distanceFromCircle/distBaseAverage) - distFromCircleMultiplier[k])}
+                            Start Ratio Diff ${startRatioDiff}
+    
+                            `)
                         }
                         else {
+                            if(startRatioDiff <= 0.1 && circRatioDiff <= 0.025 && false) {
+                                newSet[j][k][0] = point;
+                                doneInPoints.push(p);
+                        
+                                console.log(`
+                                Segment: ${j}
+                                Frac: ${k}
+                                Point: ${p}
+                                distBaseAverage ${distBaseAverage}
+                                Circle Diameter ${circlesDistance}
+                                CIrcle Radius ${circlesDistance/2}
+        
+                                Circle Distance ${point.distanceFromCircle}
+                                Ratio ${point.distanceFromCircle/distBaseAverage}
+                                Treshold ${distFromCircleMultiplier[k]}
+                                Allowance ${distBaseAllowance}
+        
+                                Start Distance ${point.distanceFromStart}
+                                Ratio ${point.distanceFromStart / segments[j].segLength}
+                                Threshold ${distFromStartMultiplier[k]}
+        
+                                Coords ${point.bound.x}, ${point.bound.y}
+                                Centroid ${point.xc}, ${point.yc}
+                                Condition: 
+                                Condition Result: ${distFromCircleMultiplier[k]  <= (point.distanceFromCircle/(distBaseAverage-distBaseAllowance))
+                                     && distFromCircleMultiplier[k]  >= (point.distanceFromCircle/(distBaseAverage+distBaseAllowance))}
+        
+                                PcondRes1 ${(point.distanceFromCircle/(distBaseAverage+distBaseAllowance))}
+                                PcondRes2 ${(point.distanceFromCircle/(distBaseAverage-distBaseAllowance))}
+        
+                                Point Distance Minus Allowance Divided by Average 
+                                Minus ${(point.distanceFromCircle - distBaseAllowance) / distBaseAverage}
+                                Plus ${(point.distanceFromCircle + distBaseAllowance) / distBaseAverage}
+        
+                                Pcond1 ${distFromCircleMultiplier[k]  <= (point.distanceFromCircle/(distBaseAverage-distBaseAllowance))}
+                                Pcond2 ${distFromCircleMultiplier[k]  >= (point.distanceFromCircle/(distBaseAverage+distBaseAllowance))}
+        
+                                //Difference checking
+        
+                                Circ Diff ${Math.abs(point.distanceFromCircle - distBaseAverage)}
+                                Circ Ratio Diff ${Math.abs((point.distanceFromCircle/distBaseAverage) - distFromCircleMultiplier[k])}
+                                Start Ratio Diff ${startRatioDiff}
+        
+                                `)
+                                continue;
+                            }
+                            /*
+                            if(circRatioDiff <= 0.025) {
+                                newSet[j][k][0] = point;
+                                doneInPoints.push(p);
+                                continue;
+                            }
+                            */
                             if(k>=2 && k<=4) {
-                                startRatioDiff = Math.abs((point.distanceFromStart / segments[j].segLength) - secondDistFromStartMultiplier[k%3])
-                                if(startRatioDiff <= 0.0255) {
+                                let secondStartRatioDiff = Math.abs((point.distanceFromStart / segments[j].segLength) - secondDistFromStartMultiplier[k%3])
+                                if(secondStartRatioDiff <= 0.025) {
                                     newSet[j][k][1] = point;
                                     doneInPoints.push(p);
+                        
                                     console.log(`
                                     Segment: ${j}
                                     Frac: ${k}
@@ -411,8 +506,10 @@ var stat = function() {
                                     Circ Diff ${Math.abs(point.distanceFromCircle - distBaseAverage)}
                                     Circ Ratio Diff ${Math.abs((point.distanceFromCircle/distBaseAverage) - distFromCircleMultiplier[k])}
                                     Start Ratio Diff ${startRatioDiff}
+                                    Second Start Ratio Diff ${secondStartRatioDiff}
             
                                     `)
+                                    //continue;
                                 }
                                 else {
                                 }
@@ -430,7 +527,10 @@ var stat = function() {
                     counter += Object.keys(newSet[j][k]).length;
                 }
 
-                if(counter!=donePoints[j].length) rejectAll = true;
+                if(counter!=donePoints[j].length) {
+                    console.log("Wrong number of points")
+                    rejectAll = true;
+                }
 
                 if(rejectAll) {
                     console.log("I broke");
