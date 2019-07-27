@@ -422,72 +422,15 @@ var stat = function() {
 
                 }
 
-                
-                //Point Check Loop
-                /*
-                for(let ctr = 0; ctr < 6; ctr++) {
-                    if(!(ctr in newSet[j])) newSet[j][ctr] = {};
-                    const lineDist = distBaseAverage * distMultiplier[ctr];
-                    const lineDist2 = distBaseAverage * dMulti2[ctr%3];
-                    const spDist = rangeMultiplier[ctr] * segments[j].segLength;
-                    const spDist2 = rMulti2[ctr%3] * segments[j].segLength;
 
-                    //loop through all the points in the segment
-                    for(let n = 0; n < donePoints[j].length; n++) {
-                        if (doneInPoints.includes(n)) continue;
-
-                        let spDiff = Math.abs(spDist - donePoints[j][n].distanceFromStart);
-                        let spDiff2 = Math.abs(spDist2 - donePoints[j][n].distanceFromStart);
-                        let lineDiff = Math.abs(lineDist - donePoints[j][n].distanceFromCircle);
-                        let lineDiff2 = Math.abs(lineDist2 - donePoints[j][n].distanceFromCircle);
-                        const spDist3 = (donePoints[j][n].distanceFromStart / segments[j].segLength);
-                        
-
-                        let check1 = (lineDiff <= circlesDistance * distMultiplier[ctr]) 
-                        //let check2 = (spDiff < circlesDistance * 1.1 && lineDiff2 <= circlesDistance * 0.51 && spDiff2 <= circlesDistance * 0.51) 
-                        let check2 = (spDist3 >= rMulti2[ctr%3] * 0.95 && spDist3 <= rMulti2[ctr%3] * 1.05 );
-                        //check if line difference is within circle distance range and within range from the starting point 
-                        if(check1) {
-                            newSet[j][ctr][0] = donePoints[j][n];
-                            doneInPoints.push(n);
-                        }
-                        else {
-                            /*
-                            if((ctr >= 2 && ctr <= 4) && check2) {
-                                newSet[j][ctr][1] = donePoints[j][n];
-                                doneInPoints.push(n);
-                            }*/
-                        /*
-                        }
-                        console.log(`
-                        Segment: ${j}
-                        Frac: ${ctr}
-                        Point: ${n}
-                        Segment Length: ${segments[j].segLength}
-                        Average Distance of SP to Circle: ${distBaseAverage}
-                        Distance From Start: ${donePoints[j][n].distanceFromStart}
-                        Distance From Circle: ${donePoints[j][n].distanceFromCircle}
-                        Coords: ${donePoints[j][n].bound.x}, ${donePoints[j][n].bound.y}
-                        Condition: ${check1}
-                        Condition2: ${check2}
-
-                        Ratio Start ${spDist3}
-                        Multiplier1 ${rangeMultiplier[ctr] }
-                        Multiplier2 ${rMulti2[ctr%3]}
-
-                        lDist ${lineDist}
-                        lDist2 ${lineDist2}
-                        spDist ${spDist}
-                        spDist2 ${spDist2}
-
-                        lDiff ${lineDiff}
-                        lDiff2 ${lineDiff2}
-                        spDiff ${spDiff}
-                        spDiff2 ${spDiff2}
-                        `)
-                    }
+                //Check if the number of points in the section has the same number of points
+                let counter = 0;
+                //Loop through the sections
+                for(let k = 0; k<6; k++) {
+                    counter += Object.keys(newSet[j][k]).length;
                 }
-                */
+
+                if(counter!=donePoints[j].length) rejectAll = true;
 
                 if(rejectAll) {
                     console.log("I broke");
