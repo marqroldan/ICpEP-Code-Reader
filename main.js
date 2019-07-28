@@ -21,6 +21,8 @@
             _boxDim = Math.min(_width, _height) * (2/3);
             document.querySelector('#roi').width = _boxDim;
             document.querySelector('#roi').height = _boxDim;
+            document.querySelector('#thresh').width = _boxDim;
+            document.querySelector('#thresh').height = _boxDim;
 
             setTimeout(function() {
                 mido();
@@ -44,7 +46,6 @@ function picker() {
 }       
 var passes = [];
 var started = false;
-var rejectAll = false;
 var distFromCircleMultiplier = [
     999,
     0.9047619048,
@@ -73,25 +74,31 @@ var secondDistFromStartMultiplier = [
 var angleMultiplier = 0.3088595203;
 
 var stat = function() {
+    var rejectAll = true;
     var donePoints = {};
     var t = 0;
     var distLast = 0;
     var lastx = 0;
     var lasty = 0;
     var findBase = [];
-    var findBaseDetails = [];
+    var findBaseDetails = [[],[]];
     started = true;
     
     let src = cv.imread('stream');
     let roi = new cv.Mat();
+    let roi1 = new cv.Mat();
     let roirect = new cv.Rect((_width/2) - (_boxDim/2), (_height/2) - (_boxDim/2), _boxDim, _boxDim)
     roi = src.roi(roirect);
     cv.imshow('roi',roi)
     let img = cv.imread('roi');
+    let dst = new cv.Mat();
 
     cv.cvtColor(img, img, cv.COLOR_RGBA2GRAY, 0);
-    cv.threshold(img, img, 100,  255, cv.THRESH_BINARY);
+    //cv.adaptiveThreshold(img, img, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 3, 2);
+    cv.Canny(img, img, 90, 255, 3, false);
+    //cv.threshold(img, img, 90,  255, cv.THRESH_BINARY);
     cv.imshow('edit', img);
+    cv.imshow('thresh', img);
 
     let contours = new cv.MatVector();
     let hierarchy = new cv.Mat();
@@ -103,140 +110,106 @@ var stat = function() {
     let circlesDistance = 0;
     let distBaseAverage = 0;
     let distBaseAllowance = 0;
+    let biggestCircle = {};
 
-    
-    cv.findContours(img, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+    cv.findContours(img, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+    console.log("Starting this check", contours.size())
     // approximates each contour to polygon
     for (let i = 0; i < contours.size(); ++i) {
         //We're only going to look for exactly 2 hexagons.
         let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),
         Math.round(Math.random() * 255));
-        if(poly.size() == 2)  {
-            doCheck();
-            break;
-        }
         let tmp = new cv.Mat();
         let tmp2 = new cv.Mat();
         let tmp3 = new cv.Mat.zeros(_boxDim, _boxDim, cv.CV_8UC3);
         let cnt = contours.get(i);
-        //let moment = cv.moments(cnt, false);
-        //centroids.push({x: moment.m10/moment.m00, y: moment.m01/moment.m00});
+        cv.convexHull(cnt, tmp, false, true);
+            
+        let circle = cv.minEnclosingCircle(tmp);
+        if( circle.radius >= _boxDim * 0.25 && circle.radius <= _boxDim * 0.4) {
+            
+            //if center is within bounds
+            let centerBox = _boxDim * 0.05;
+            circle.x = circle.center.x - (_boxDim * 0.5);
+            circle.y = (_boxDim * 0.5) - circle.center.y;
 
-        if(false) {
-            cv.approxPolyDP(cnt, tmp, 60, true);
-            let vertices = tmp.size().width * tmp.size().height
-            if(vertices == 6)  {
-                let edgeLength = [];
-                for(let k = 0; k < 5; k++) {
-                    const [x1, y1] = tmp.intPtr(k);
-                    const [x2, y2] = tmp.intPtr((k+1)%6);
-                    edgeLength.push(Math.hypot(x2-x1, y2-y1));
+            //Ignore if out of bounds
+            if(!((circle.x >= (centerBox * -1) && circle.x <= centerBox) && (circle.y >= (centerBox * -1) && circle.y <= centerBox))) continue;
+
+
+            if(poly.size() > 0) {
+                let firstCircle = circles[0];
+                biggestCircle = circles[0]['radius'] > circle['radius'] ? circles[0] : circle;
+                circlesDistance = Math.abs(circles[0]['radius'] - circle['radius']);
+                //Check if the radius is within bounds
+                if(circlesDistance > biggestCircle.radius * 0.1379310345 ||  circlesDistance <= biggestCircle.radius * 0.04) {
+                    console.log("Bad circle distance")
+                    continue;
                 }
-    
-                if(Math.max(...edgeLength) - Math.min(...edgeLength) > 30) {
-                    console.log("BAD", Math.max(...edgeLength) - Math.min(...edgeLength))
-                    rejectAll = true;
+                //Check if distances of two circles aren't that great
+                if(Math.hypot(firstCircle.y - circle.y, firstCircle.x - circle.y) > 6) {
+                    console.log('User is moving', Math.hypot(firstCircle.y - circle.y, firstCircle.x - circle.y));
                     break;
                 }
-    
-                let circle = cv.minEnclosingCircle(tmp);
-                if( circle.radius >= 80 && circle.radius <= 162) {
-                    poly.push_back(tmp);
-                    circles.push(circle)
-                    cv.circle(src, circle.center, circle.radius, color)
-                    cv.drawContours(src, poly, polyCount, color, 1, 8, hierarchy, 0);
-                    cv.imshow('edit', src);
-                    polyCount++;
-                }
-                else {
-                    console.log("bad circle!");
-                }
+
             }
-        }
-        else {
-            cv.convexHull(cnt, tmp, false, true);
-                let edgeLength = [];
-                for(let k = 0; k < 5; k++) {
-                    const [x1, y1] = tmp.intPtr(k);
-                    const [x2, y2] = tmp.intPtr((k+1)%6);
-                    edgeLength.push(Math.hypot(x2-x1, y2-y1));
-                }
-                
-                let vertices = tmp.size().width * tmp.size().height
+
+            poly.push_back(tmp);
+            circles.push(circle)
+            cv.circle(roi, circle.center, circle.radius, color)
+            cv.drawContours(roi, poly, polyCount, color, 1, 8, hierarchy, 0);
+            cv.imshow('edit', roi);
+            polyCount++;
+
+            if(polyCount==2) {
+
+                //check if 
+
                 /*
-                if(Math.max(...edgeLength) - Math.min(...edgeLength) > 13) {
-                    console.log("BAD", Math.max(...edgeLength) - Math.min(...edgeLength))
+                fCircle = cv.boundingRect(poly.get(0));
+                fCircle.xc = fCircle.x - (_boxDim * 0.5);
+                fCircle.yc = (_boxDim * 0.5) - fCircle.y;
+
+                sCircle = cv.boundingRect(poly.get(1));
+                sCircle.xc = sCircle.x - (_boxDim * 0.5);
+                sCircle.yc = (_boxDim * 0.5) - sCircle.y;
+
+
+                fCircle = circles[0].center;
+                sCircle = circles[1].center;
+                if(Math.hypot(fCircle.y - sCircle.y, fCircle.x - sCircle.y) > 15) {
+                    console.log('Circle - User is moving',Math.hypot(fCircle.y - sCircle.y, fCircle.x - sCircle.y));
                     rejectAll = true;
                     break;
                 }*/
-                let circle = cv.minEnclosingCircle(tmp);
-                if( circle.radius >= _boxDim * 0.25 && circle.radius <= _boxDim * 0.4) {
-                    
-                    //if center is within bounds
-                    let centerBox = _boxDim * 0.05;
-                    let xCircle = circle.center.x - (_boxDim * 0.5);
-                    let yCircle = (_boxDim * 0.5) - circle.center.y;
-
-                    //Ignore if out of bounds
-                    if(!((xCircle >= (centerBox * -1) && xCircle <= centerBox) && (yCircle >= (centerBox * -1) && yCircle <= centerBox))) continue;
-
-                    poly.push_back(tmp);
 
 
-                    circles.push(circle)
-                    cv.circle(roi, circle.center, circle.radius, color)
-                    cv.drawContours(roi, poly, polyCount, color, 1, 8, hierarchy, 0);
-                    cv.imshow('edit', roi);
-                    polyCount++;
 
-                    if(polyCount==2) {
-                        let fCircle = {}, sCircle = {};
-
-                        fCircle = cv.moments(poly.get(0));
-                        fCircle.x = fCircle.m10/fCircle.m00;
-                        fCircle.y = (fCircle.m01/fCircle.m00);
-
-                        sCircle = cv.moments(poly.get(1));
-                        sCircle.x = (sCircle.m10/sCircle.m00);
-                        sCircle.y = sCircle.m01/sCircle.m00;
-
-                        if(Math.hypot(fCircle.y - sCircle.y, fCircle.x - sCircle.y) > 10) {
-                            console.log('User is moving', Math.hypot(fCircle.y - sCircle.y, fCircle.x - sCircle.y));
-                            rejectAll = true;
-                        }
-
-                        fCircle = circles[0].center;
-                        sCircle = circles[1].center;
-                        if(Math.hypot(fCircle.y - sCircle.y, fCircle.x - sCircle.y) > 10) {
-                            console.log('Circle - User is moving',Math.hypot(fCircle.y - sCircle.y, fCircle.x - sCircle.y));
-                            rejectAll = true;
-                        }
-
-                    }
-                }
+            }
         }
         cnt.delete(); tmp.delete(); tmp2.delete(); tmp3.delete();
-        if(i==contours.size()-1) {
-            started = false;
+        if(poly.size() == 2)  {
+            rejectAll = false;
+            doCheck();
+            break;
         }
     }
 
-    if(rejectAll) {
-        trash();
-        return;
-    }
+    //Execute this
+    if(rejectAll) trash();
 
     function doCheck() {
         console.log('Checking for validity..');
         console.log(poly.get(0).size())
         console.log(poly.get(1).size())
-        if(passes.length < 3) {
-            passes.push(Math.abs(circles[0]['radius'] - circles[1]['radius']));
+        if(passes.length < 5) {
+            passes.push(Math.abs(circles[0]['radius'] - circles[1]['radius']))//contours.size());
             rejectAll = true;
+            console.log("Testy2")
             return;
         }
         else {
-            if(Math.max(...passes) - Math.min(...passes) < 5) {
+            if(Math.max(...passes) - Math.min(...passes) < 15) {
                 //good to go
                 console.log('good')
                 rejectAll = false;
@@ -245,14 +218,26 @@ var stat = function() {
                 console.log('Difference', Math.max(...passes) - Math.min(...passes))
                 passes = [];
                 rejectAll = true;
+                console.log("Testy1")
                 return;
             }
         }
 
 
-        let biggestCircle = circles[0]['radius'] > circles[1]['radius'] ? circles[0] : circles[1];
+        //Get the biggest hexagon and the circle 
         let biggestHexagon = circles[0]['radius'] > circles[1]['radius'] ? poly.get(0) : poly.get(1);
         let verticesDiff = {};
+        //circlesDistance = Math.abs(circles[0]['radius'] - circles[1]['radius']);
+        const newRadius = biggestCircle.radius + (circlesDistance * 2.25);
+
+        /*
+        // Make sure the difference is not too big or not too small
+        if(circlesDistance > biggestCircle.radius * 0.1379310345 ||  circlesDistance <= biggestCircle * 0.02) {
+            rejectAll = true;
+            console.log("Bad circle distance")
+            return;
+        }
+        */
 
         biggestCircle.x = biggestCircle.center.x - (_boxDim * 0.5);
         biggestCircle.y = (_boxDim * 0.5) - biggestCircle.center.y;
@@ -266,16 +251,6 @@ var stat = function() {
             let distance = Math.hypot (biggestCircle.x - point.x, biggestCircle.y - point.y);
             verticesDiff[i] = distance;
         }
-
-        /*
-
-            if (i>0) {
-                //get the distance at i-1
-                let pastDistance = verticesDiff[i-1];
-                if(Math.abs(pastDistance - distance) < 10) continue;
-            }
-            */
-
 
         console.log(verticesDiff);
 
@@ -316,9 +291,9 @@ var stat = function() {
 
         let donePointsSort = [];
         let pointsInOrder = [];
-        let rotation = 0;
+        let rotation = -1;
         //Arrange them in one order and get the rotation
-        //If rotation is positive, then the point goes counterclockwise
+        //If rotation is positive (0), then the point goes counterclockwise(1)
         //Else it's clockwise;
         for(let i = 0; i < 6; i++) {
             let point = newSorted[i];
@@ -330,7 +305,7 @@ var stat = function() {
             for(let k = 0; k < newSorted.length; k++ ) {
                 if(donePointsSort.includes(k)) continue;
                 let point2 = newSorted[k];
-                if(i==0) rotation = (point2.y - point.y) / (point2.x - point.y);
+                if(i==0) rotation = ((point2.y - point.y) / (point2.x - point.y)) > 0 ? 0 : 1;
                 if(Math.hypot(point2.x - point.x, point2.y-point.y) <= biggestCircle.radius * 1.25) {
                     pointsInOrder.push(point2);
                     donePointsSort.push(k);
@@ -342,17 +317,161 @@ var stat = function() {
         console.log(rotation);
         console.log(pointsInOrder);
 
-        //Loop through the points that are now in order
+        let diagonalDiff = [];
+
+        //Looping to check if it's skewed or not 
+        for(let i = 0; i < 3; i++) {
+            let point = pointsInOrder[i];
+            let point2 = pointsInOrder[(i+3)%6];
+
+            diagonalDiff.push(Math.hypot(point.x - point2.x, point.y - point2.y))
+        }
+
+        if(Math.max(...diagonalDiff) - Math.min(...diagonalDiff) > 9) {
+            console.log("It's most likely skewed", Math.max(...diagonalDiff) - Math.min(...diagonalDiff))
+            rejectAll = true;
+        }
 
 
+        //Looping to make segments 
+        for(let i = 0; i<6; i++) {
+            let startPoint = pointsInOrder[i];
+            let endPoint = pointsInOrder[(i+1)%6];
+            let distCP = Math.hypot(startPoint.x,startPoint.y);
+            const distSP = Math.hypot(startPoint.x - endPoint.x,startPoint.y - endPoint.y) / 2;
+            const angle = 2 * (180/Math.PI) * (Math.asin(distSP/distCP));
+            const height = Math.sqrt(Math.pow(distCP,2) - Math.pow(distSP,2));
+            segments.push( {startPoint, endPoint, hyp: distCP, height, angle, segLength: distSP * 2 });
+        }
+        console.log("Segments", segments);
 
-        
+        console.log("Contours Size: ", contours.size())
+        //Looping for grouping the dots to its specific segments
+        for (let i = 0; i < contours.size(); i++) {
+            if(findBaseDetails[0].length>2 || findBaseDetails[1].length > 2) {
+                console.log(findBaseDetails);
+                console.log('Break daw');
+                rejectAll = true;
+                break;
+            }
+            let tmp = new cv.Mat();
+            let cnt = contours.get(i);
+            cv.convexHull(cnt, tmp, false, true);
+            let bound = cv.boundingRect(tmp);
+            const moment = cv.moments(tmp);
+            const area = moment.m00;
+            let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),Math.round(Math.random() * 255));
 
+            /*
+            //Filter unimportant contours with area not in range
+            if((area > (Math.PI * Math.pow((circlesDistance/2) * 1.75,2))) || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.5,2)))) {
+                //But if the bounding box is at least within the range of the circles distance, then all is good
+                if(!(bound.width >= circlesDistance * 0.8 && bound.width <= circlesDistance * 1.2 && bound.height >= circlesDistance * 0.8 && bound.height <= circlesDistance * 1.2)) {
+                    console.log('Yeah skip these', area, bound);
+                    continue;
+                }
+            }
+
+            */
+            
+            //Computing for based from center equivalent
+            let xc = (bound.x + (bound.width/2)) - (_boxDim * 0.5);
+            let yc = (_boxDim * 0.5) - (bound.y + (bound.height/2));
+            const distanceFromCircle = Math.hypot(xc,yc)
+
+            /*
+            //If the point is waaay inside the circle, ignore those
+            if(distanceFromCircle <= biggestCircle.radius - (circlesDistance * 2.5)) {
+                console.log("La sa range eh, sad", bound, distanceFromCircle, biggestCircle.radius - (circlesDistance * 1.5))
+                continue;
+            }*/
+
+            
+            //Filter similar points by getting the difference of the last point and the next point, comparing if it's greater than the circlesDistance
+            if( lastx==0 && lasty==0) {
+                lastx = xc;
+                lasty = yc;
+            }
+            else {
+                distLast = Math.hypot(xc - lastx, yc - lasty);
+                lastx = xc;
+                lasty = yc;
+                if (distLast < circlesDistance * 0.75 ) {
+                    console.log("Bleep bleep");
+                    continue;
+                }
+            }
+
+            // j is the segment number
+            for(let j = 0; j<6; j++) {
+                if(!(j in donePoints)) donePoints[j] = [];
+
+                const distanceFromStart = Math.hypot(segments[j].startPoint.x - xc, segments[j].startPoint.y - yc);
+                const distanceFromEnd = Math.hypot(segments[j].endPoint.x - xc, segments[j].endPoint.y - yc);
+                const angle = (180/Math.PI) * (Math.acos((Math.pow(segments[j].hyp,2) + Math.pow(distanceFromCircle,2) - Math.pow(distanceFromStart,2))/(2 * segments[j].hyp * distanceFromCircle)));
+                
+                const deets = {bound, xc, yc, area, distLast, angle,  distanceFromCircle, distanceFromStart,distanceFromEnd}
+                if(distanceFromCircle >= segments[j].height && distanceFromCircle <= segments[j].height + (circlesDistance * 2.5)) {
+                    if (  
+                        (distanceFromStart <= segments[j].segLength && distanceFromEnd <= segments[j].segLength )
+                    ) {
+                        t++;
+                        if(angle <= segments[j].angle * angleMultiplier) {
+                            //
+
+                            console.log("Found as base",  area, bound)
+
+                            let dirDist = [distanceFromStart, distanceFromEnd];
+                            if(findBaseDetails[dirDist.indexOf(Math.min(...dirDist))].includes(j)) continue;
+    
+                            findBaseDetails[dirDist.indexOf(Math.min(...dirDist))].push(j);
+                            if(distBaseAverage==0) {
+                                distBaseAverage = distanceFromCircle;
+                            }
+                            else {
+                                distBaseAverage = (distBaseAverage + distanceFromCircle) / 2;
+                                distBaseAllowance = Math.abs(distBaseAverage - distanceFromCircle)
+                            }
+                            console.log("Average Distance of Base", distBaseAverage);
+                        }
+                        else {
+                            console.log("Yep, found a point");
+                            donePoints[j].push(deets);
+                            polyCirc.push_back(cnt);
+                            cv.drawContours(roi, contours, i, color, 1, 8, hierarchy, 0);
+                            cv.imshow('edit', roi);
+                        }
+                        break;
+                    }
+                    cv.circle(roi,({x: bound.x,y: bound.y}), 2, color, -1)
+                }
+                else {
+                    console.log('Di eh', distanceFromCircle, j, segments[j].height, circlesDistance, bound);
+                }
+            }
+        }
+
+        console.log(t);
+        console.log(findBaseDetails);
+        console.log(donePoints);
+
+        if(findBaseDetails[0].length!=2 || findBaseDetails[0].length!=2) {
+            //rejectAll = true;
+        }
+
+        for(let i = 0; i<2;i++) {
+            if(findBaseDetails[i].length>0) {
+                //They should always be adjacent
+                if(Math.abs(findBaseDetails[i][0] - findBaseDetails[i][1]) > 1) {
+                    console.log('Base are not adjacent, bad')
+                    rejectAll = true;
+                    break;
+                }
+            }
+        }
+        rejectAll = false;
         return;
 
-        //Get the biggest hexagon and the circle 
-        circlesDistance = Math.abs(circles[0]['radius'] - circles[1]['radius']);
-        const newRadius = biggestCircle.radius + (circlesDistance * 1.5);
         
         
         /*
@@ -383,86 +502,6 @@ var stat = function() {
             segments.push( {startPoint, endPoint, hyp: distCP, angle, segLength: distSP * 2 });
         }
         console.log("Segments", segments);
-
-        //Looping to check the dots
-        for (let i = 0; i < contours.size(); i++) {
-            if(findBase.length>2) {
-                console.log(findBase);
-                console.log('Break daw');
-                rejectAll = true;
-                break;
-            }
-            let cnt = contours.get(i);
-            let bound = cv.boundingRect(cnt);
-            const moment = cv.moments(cnt);
-            const area = moment.m00;
-
-            //Filter unimportant contours with area not in range
-            if((area > (Math.PI * Math.pow((circlesDistance/2) * 1.75,2))) || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.3,2)))) continue;
-            
-            let color = new cv.Scalar(Math.round(Math.random() * 255), Math.round(Math.random() * 255),Math.round(Math.random() * 255));
-            let xc = moment.m10/moment.m00 - biggestCircle.center.x;
-            let yc = biggestCircle.center.y - moment.m01/moment.m00;
-            const distanceFromCircle = Math.hypot(xc,yc)
-
-            //Filter similar points by getting the difference of the last point and the next point, comparing if it's greater than the circlesDistance
-            if( lastx==0 && lasty==0) {
-                lastx = xc;
-                lasty = yc;
-            }
-            else {
-                distLast = Math.hypot(xc - lastx, yc - lasty);
-                lastx = xc;
-                lasty = yc;
-                if (distLast < circlesDistance ) continue;
-            }
-
-            if(distanceFromCircle <= newRadius) {
-                t++;
-                // j is the segment number
-                for(let j = 0; j<6; j++) {
-                    if(!(j in donePoints)) donePoints[j] = [];
-
-                    const distanceFromStart = Math.hypot(segments[j].startPoint[0] - xc, segments[j].startPoint[1] - yc);
-                    const distanceFromEnd = Math.hypot(segments[j].endPoint[0] - xc, segments[j].endPoint[1] - yc);
-                    const angle = (180/Math.PI) * (Math.acos((Math.pow(segments[j].hyp,2) + Math.pow(distanceFromCircle,2) - Math.pow(distanceFromStart,2))/(2 * segments[j].hyp * distanceFromCircle)));
-                    
-                    const deets = {bound, xc, yc, area, distLast, angle,  distanceFromCircle, distanceFromStart,distanceFromEnd}
-                    //check if slopes are equal and also within the radius
-                    if (  
-                        ( distanceFromCircle <= newRadius && distanceFromStart <= segments[j].segLength && distanceFromEnd <= segments[j].segLength )
-                    ) {
-                        if(angle <= segments[j].angle * angleMultiplier) {
-                            if(findBase.includes(j)) continue;
-                            findBase.push(j);
-                            if(distBaseAverage==0) {
-                                distBaseAverage = distanceFromCircle;
-                            }
-                            else {
-                                distBaseAverage = (distBaseAverage + distanceFromCircle) / 2;
-                                distBaseAllowance = Math.abs(distBaseAverage - distanceFromCircle)
-                            }
-                            console.log("One circ", distBaseAverage);
-                        }
-                        else {
-                            donePoints[j].push(deets);
-                            polyCirc.push_back(cnt);
-                            cv.drawContours(src, contours, i, color, 1, 8, hierarchy, 0);
-                            cv.imshow('edit', src);
-                        }
-                        break;
-                    }
-                    /*
-                    else {
-                        if( distanceFromCircle <= newRadius) {
-                            console.log(distanceFromStart, distanceFromEnd)
-                            console.log(segments[j], distanceFromStart <= segments[j].segLength, distanceFromEnd <= segments[j].segLength)
-                        }
-                    }
-                    */
-                }
-            }
-        }
 
         if(!rejectAll) {
             started = true;
@@ -633,6 +672,7 @@ var stat = function() {
             
             if(rejectAll)  {
                 //leave sorting function
+                console.log("Testy 5")
                 return;
             }
             
@@ -689,8 +729,6 @@ $bottomright = substr($idnum, 15, 3);     6 5
         
     }
 
-
-
     function trash(reject=false) {
         started = reject;
         rejectAll = reject;
@@ -707,9 +745,6 @@ $bottomright = substr($idnum, 15, 3);     6 5
         var mido = function() {
           //draw the stream to the canvas
           stream.getContext('2d').drawImage(video, 0, 0, _width, _height);
-
-
-            
             if(!started) stat();
           
             //makesure it loops back
