@@ -47,6 +47,19 @@ function picker() {
 var passes = [];
 var started = false;
 
+var firstMultiplierFromStartingPoint = [
+    0.3629737609,
+    0.4679300292,
+    0.5621963071,
+    0.6550048591,
+    0.7594752187,
+    0.8576287658,
+];
+var secondMultiplierFromStartingPoint = [
+    0.721574344,
+    0.832361516,
+    0.6224489796,
+];
 
 var stat = function() {
     var rejectAll = true;
@@ -236,6 +249,7 @@ var stat = function() {
         console.log(sortedKeys);
         let newSorted = [];
         let doneReadPoints = [];
+        let yPointDiff = [];
 
         //Grouping them and making sure we only get 6 points
         for(let i = 0; i<sortedKeys.length; i++) {
@@ -246,7 +260,8 @@ var stat = function() {
                 coords: point,
                 x: point[0] - (_boxDim * 0.5),
                 y: (_boxDim * 0.5) - point[1],
-            }
+            } 
+            yPointDiff.push(newPoint.y);
             newSorted.push(newPoint);
             doneReadPoints.push(i);
             for(let k = 0; k < sortedKeys.length; k++) {
@@ -268,30 +283,36 @@ var stat = function() {
 
         let donePointsSort = [];
         let pointsInOrder = [];
-        let rotation = -1;
-        //Arrange them in one order and get the rotation
-        //If rotation is positive (0), then the point goes counterclockwise(1)
-        //Else it's clockwise;
+
         for(let i = 0; i < 6; i++) {
-            let point = newSorted[i];
+            //Get the point that has the highest positive y value
+            let point = newSorted[yPointDiff.indexOf(Math.max(...yPointDiff))];
             if(i==0) {
                 pointsInOrder.push(point);
-                donePointsSort.push(i);
+                donePointsSort.push(yPointDiff.indexOf(Math.max(...yPointDiff)));
             }
             point = pointsInOrder[pointsInOrder.length - 1];
             for(let k = 0; k < newSorted.length; k++ ) {
                 if(donePointsSort.includes(k)) continue;
                 let point2 = newSorted[k];
-                if(i==0) rotation = ((point2.y - point.y) / (point2.x - point.y)) > 0 ? 0 : 1;
-                if(Math.hypot(point2.x - point.x, point2.y-point.y) <= biggestCircle.radius * 1.25) {
-                    pointsInOrder.push(point2);
-                    donePointsSort.push(k);
-                    break;
+                if((Math.hypot(point2.x - point.x, point2.y-point.y) <= biggestCircle.radius * 1.25)) {
+                    if(i==0) {
+                        if(point2.x > point.x) {
+                            pointsInOrder.push(point2);
+                            donePointsSort.push(k);
+                            break;
+                        }
+                    }
+                    else {
+                        pointsInOrder.push(point2);
+                        donePointsSort.push(k);
+                        break;
+                    }
                 }
             }
         }
 
-        console.log(rotation);
+        console.log(newSorted);
         console.log(pointsInOrder);
 
         let diagonalDiff = [];
@@ -309,7 +330,6 @@ var stat = function() {
             rejectAll = true;
             return;
         }
-
 
         //Looping to make segments 
         for(let i = 0; i<6; i++) {
@@ -347,7 +367,7 @@ var stat = function() {
             //Filter unimportant contours with area not in range
             if((area > (Math.PI * Math.pow((circlesDistance/2) * 1.75,2))) || (area < (Math.PI * Math.pow((circlesDistance/2) * 0.5,2)))) {
                 //But if the bounding box is at least within the range of the circles distance, then all is good
-                if(!(bound.width >= circlesDistance * 0.8 && bound.width <= circlesDistance * 1.2 && bound.height >= circlesDistance * 0.8 && bound.height <= circlesDistance * 1.2)) {
+                if(!(bound.width >= circlesDistance * 0.8 && bound.width <= circlesDistance * 1.05 && bound.height >= circlesDistance * 0.8 && bound.height <= circlesDistance * 1.05)) {
                     //cv.rectangle(roi, {x: bound.x, y: bound.y}, {x: bound.x + bound.width, y: bound.y + bound.height}, color, 1)
                     alreadyDrawn = true;
                     console.log('Yeah skip these', area, bound);
@@ -393,6 +413,8 @@ var stat = function() {
                 const angle = (180/Math.PI) * (Math.acos((Math.pow(segments[j].hyp,2) + Math.pow(distanceFromCircle,2) - Math.pow(distanceFromStart,2))/(2 * segments[j].hyp * distanceFromCircle)));
                 const perpDistance = Math.abs((segments[j].slope * xc) - yc + segments[j].intercept) / Math.hypot(segments[j].slope, 1);
                 const deets = {bound, xc, yc, area, distLast, angle, perpDistance, distanceFromCircle, distanceFromStart,distanceFromEnd}
+
+
                 if(distanceFromCircle >= segments[j].height - (circlesDistance * 1.5) && distanceFromCircle <= segments[j].segLength + (circlesDistance * 2)) {
                     if (  
                         (distanceFromStart <= segments[j].segLength && distanceFromEnd <= segments[j].segLength )
@@ -421,7 +443,12 @@ var stat = function() {
                             //check if point is already in segment
                             for(let g = 0; g < donePoints[j].length; g++) {
                                 let pointCheck = donePoints[j][g];
-                                if(pointCheck.bound.x == bound.x && pointCheck.bound.y == bound.y) {
+                                /*
+                                if((pointCheck.bound.x == bound.x && pointCheck.bound.y == bound.y) || (pointCheck.xc == xc && pointCheck.yc == yc)) {
+                                    pointOk = false;
+                                    break;
+                                }*/
+                                if(Math.hypot(pointCheck.xc - xc, pointCheck.yc - yc) < 5) {
                                     pointOk = false;
                                     break;
                                 }
@@ -452,7 +479,7 @@ var stat = function() {
         console.log(findBaseDetails);
         console.log(donePoints);
 
-        if(findBaseDetails[0].length!=2 || findBaseDetails[0].length!=2) {
+        if(Math.max(findBaseDetails[0].length,findBaseDetails[1].length) < 2) {
             console.log("There should be at least two entries in one of the index!")
             rejectAll = true;
             return
@@ -478,31 +505,61 @@ var stat = function() {
 
     function labelling() {
         let newSet = {};
+
+        console.log("Segments", segments);
+        console.log("Circles Distance", circlesDistance);
+
+        //If 0, counter clockwise // from start
+        //If 1, clockwise //from end
+        let rotation = (findBaseDetails[0].length==2) ? 0 : 1;
+        console.log("Rotation", rotation)
         
         //Loop through the segments
-        for(let i = 0; i < 6; i++) {
-            if(!(i in newSet)) newSet[i] = {};
+        for(let segmentId = 0; segmentId < 6; segmentId++) {
+            let doneCheckPoints = []
+            if(!(segmentId in newSet)) newSet[segmentId] = {};
 
-            //Loop through the specific points
-
-
-            //loop through the points in the segments
-            for(let k = 0; k < donePoints[j].length; k++) {
-                let point = donePoints[j][k];
-
-
+            //Loop through the specific poits identifier
+            for (let j = 0; j < 6; j++) {
+                if(!(j in newSet[segmentId])) newSet[segmentId][j] = {};
+                //loop through the points in the segments
+                for(let k = 0; k < donePoints[segmentId].length; k++) {
+                    if(doneCheckPoints.includes(k)) continue;
+                    let point = donePoints[segmentId][k];
+                    if(rotation) {
+                        point.distRatio = point.distanceFromEnd / segments[segmentId].segLength;
+                    }
+                    else {
+                        point.distRatio = point.distanceFromStart / segments[segmentId].segLength;
+                    }
+                    point.dFSRdiff = (Math.abs(point.distRatio - firstMultiplierFromStartingPoint[j]));
+                    //Meaning 0th siya
+                    if (point.perpDistance < circlesDistance * 1.6) {
+                        if(point.dFSRdiff < 0.05) {
+                            newSet[segmentId][j][0] = point;
+                            doneCheckPoints.push(k)
+                            console.log('0 dapat, segmentId:',segmentId, 'j', j, point);
+                        }
+                        else {
+                           console.log('0 but Missing segmentId:',segmentId, 'j', j, point, secondMultiplierFromStartingPoint[j%3]);
+                        }
+                    }
+                    else {
+                        if(j>=2 && j<=4) {
+                            point.dFSRdiff = (Math.abs(point.distRatio - secondMultiplierFromStartingPoint[j%3]));
+                            if (point.dFSRdiff < 0.05) {
+                                newSet[segmentId][j][1] = point;
+                                doneCheckPoints.push(k)
+                                console.log('1 dapat, segmentId:',segmentId, 'j', j, point, secondMultiplierFromStartingPoint[j%3]);
+                            }
+                        }
+                    }
+                }
             }
         }
 
-
-        if(rejectAll)  {
-            //leave sorting function
-            return;
-        }
-        
-    }
-
-    function displaying() {
+            
+        console.log(newSet);
         let bits = {};
             for(let i = 0; i<6; i++) {
                 let bitPart = '000000000'.split("");
@@ -534,7 +591,8 @@ var stat = function() {
                 $bottomright = substr($idnum, 15, 3);     6 5
                 */                  
 
-                let highestSide = Math.max(...findBase);
+                console.log("Rotation", rotation)
+                let highestSide = Math.max(...findBaseDetails[rotation]);
                 let _bLeft = highestSide;
                 let _bRight = (highestSide +5) % 6;
                 let _tLeft = (_bLeft + 2) % 6;
@@ -543,9 +601,18 @@ var stat = function() {
                 let _right = (_bLeft + 4) % 6;
 
                 let finalString = `${bits[_tLeft]}${bits[_tRight]}${bits[_left]}${bits[_right]}${bits[_bLeft]}${bits[_bRight]}`;
-                document.querySelector('#text').textContent = finalString;
+                document.querySelector('#text').textContent = '"Rotation"' + rotation + finalString;
         
         started = true;
+
+        if(rejectAll)  {
+            //leave sorting function
+            return;
+        }
+        
+    }
+
+    function displaying() {
     }
 
     function trash(reject=false) {
